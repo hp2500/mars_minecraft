@@ -510,36 +510,61 @@ summary(fit_cfa_3f, standardized = T, fit.measures = T, rsq = T)
 semPaths(fit_cfa_3f, "std",cardinal = F, edge.label.cex = 0.6, curvePivot =T, layout = "tree2", sizeMan = 3, sizeMan2 = 2, edge.color = "black", edge.label.position = 0.8)
 
 # 3 factor solution orthogonal
+cfa_3f <- 'pc =~ pc3 + pc5 + pc6 + pc7 + pc8 + pc9 + pc10 + pc11
+mr =~ mr3 + mr4 + mr5 + mr6 + mr7 + mr8 + mr10
+sc =~ sc6 + sc7 +sc8 + sc9+ sc10 + sc12'
 fit_cfa.ort <- cfa(cfa_3f, data = all_wide_2[,-1], std.lv=T, orthogonal = T)
 summary(fit_cfa.ort, standardized = T, fit.measures = T, rsq = T)
+semPaths(fit_cfa.ort, "std",cardinal = F, edge.label.cex = 0.6, curvePivot =T, layout = "tree2", sizeMan = 3, sizeMan2 = 2, edge.color = "black", edge.label.position = 0.8)
 anova(fit_cfa_3f, fit_cfa.ort) 
 
-# compare to model with just one latent factor
+# model with just one latent factor
 cfa.model.one <- 'score =~ pc3 + pc5 + pc6 + pc7 + pc8 + pc9 + pc10 + pc11 + mr3 + mr4 + mr5 + mr6 + mr7 + mr8 + mr10 + sc6 + sc7 +sc8 + sc9 + sc10 + sc12'
 fit_cfa.one <- cfa(cfa.model.one, data = all_wide_2[,-1])
 summary(fit_cfa.one, standardized = T, fit.measures = T, rsq = T)
 anova(fit_cfa_3f, fit_cfa.one)
 
+# 3 factor solution with higher level g 
+cfa_3f_g <- 'pc =~ pc3 + pc5 + pc6 + pc7 + pc8 + pc9 + pc10 + pc11
+mr =~ mr3 + mr4 + mr5 + mr6 + mr7 + mr8 + mr10
+sc =~ sc6 + sc7 +sc8 + sc9+ sc10 + sc12
+g =~ pc + mr + sc'
+fit_cfa_3f_g <- cfa(cfa_3f_g, data = all_wide_2[,-1], std.lv=T, orthogonal = F)
+summary(fit_cfa_3f_g, standardized = T, fit.measures = T, rsq = T)
+semPaths(fit_cfa_3f_g, "std",cardinal = F, edge.label.cex = 0.6, curvePivot =T, layout = "tree2", sizeMan = 3, sizeMan2 = 2, edge.color = "black", edge.label.position = 0.8)
+anova(fit_cfa_3f, fit_cfa.ort, fit_cfa.one, fit_cfa_3f_g)
+
 
 # 2 factor solution oblique MR excluded
 cfa_2f <- 'pc =~ pc3 + pc5 + pc6 + pc7 + pc8 + pc9 + pc10 + pc11
 sc =~ sc6 + sc7 +sc8 + sc9+ sc10 + sc12'
-fit_cfa <- cfa(cfa_2f, data = all_wide_2[,-1], std.lv=T, orthogonal = F)
-summary(fit_cfa, standardized = T, fit.measures = T, rsq = T)
-semPaths(fit_cfa, "std",cardinal = F, edge.label.cex = 0.6, curvePivot =T, layout = "tree2", sizeMan = 3, sizeMan2 = 2, edge.color = "black", edge.label.position = 0.8)
+fit_cfa_2f <- cfa(cfa_2f, data = all_wide_2[,-1], std.lv=T, orthogonal = F)
+summary(fit_cfa_2f, standardized = T, fit.measures = T, rsq = T)
+semPaths(fit_cfa_2f, "std",cardinal = F, edge.label.cex = 0.6, curvePivot =T, layout = "tree2", sizeMan = 3, sizeMan2 = 2, edge.color = "black", edge.label.position = 0.8)
 
 # 2 factor solution orthogonal MR excluded
 cfa_2f_orth <- 'pc =~ pc3 + pc5 + pc6 + pc7 + pc8 + pc9 + pc10 + pc11
 sc =~ sc6 + sc7 +sc8 + sc9+ sc10 + sc12'
-fit_cfa_orth <- cfa(cfa_2f_orth, data = all_wide_2[,-1], std.lv=T, orthogonal = T)
-summary(fit_cfa_orth, standardized = T, fit.measures = T, rsq = T)
-semPaths(fit_cfa_orth, "std",cardinal = F, edge.label.cex = 0.6, curvePivot =T, layout = "tree2", sizeMan = 3, sizeMan2 = 2, edge.color = "black", edge.label.position = 0.8)
-anova(fit_cfa, fit_cfa_orth)
+fit_cfa_2f_orth <- cfa(cfa_2f_orth, data = all_wide_2[,-1], std.lv=T, orthogonal = T)
+summary(fit_cfa_2f_orth, standardized = T, fit.measures = T, rsq = T)
+semPaths(fit_cfa_2f_orth, "std",cardinal = F, edge.label.cex = 0.6, curvePivot =T, layout = "tree2", sizeMan = 3, sizeMan2 = 2, edge.color = "black", edge.label.position = 0.8)
+anova(fit_cfa, fit_cfa_2f_orth)
 
 # compare to model with just one latent factor
-cfa.model.one <- 'score =~ pc3 + pc5 + pc6 + pc7 + pc8 + pc9 + pc10 + pc11 + sc6 + sc7 +sc8 + sc9 + sc10 + sc12'
-fit_cfa.one <- cfa(cfa.model.one, data = all_wide_2[,-1])
-summary(fit_cfa.one, standardized = T, fit.measures = T, rsq = T)
+cfa_2f_one <- 'score =~ pc3 + pc5 + pc6 + pc7 + pc8 + pc9 + pc10 + pc11 + sc6 + sc7 +sc8 + sc9 + sc10 + sc12'
+fit_cfa_2f_one <- cfa(cfa_2f_one, data = all_wide_2[,-1])
+summary(fit_cfa_2f_one, standardized = T, fit.measures = T, rsq = T)
+
+# 2 factor solution with higher level g
+cfa_2f_g <- 'pc =~ pc3 + pc5 + pc6 + pc7 + pc8 + pc9 + pc10 + pc11
+sc =~ sc6 + sc7 +sc8 + sc9+ sc10 + sc12
+g =~ a*pc + a*sc'
+fit_cfa_2f_g <- cfa(cfa_2f_g, data = all_wide_2[,-1], std.lv=T, orthogonal = F)
+summary(fit_cfa_2f_g, standardized = T, fit.measures = T, rsq = T)
+semPaths(fit_cfa_2f_g, "std",cardinal = F, edge.label.cex = 0.6, curvePivot =T, layout = "tree2", sizeMan = 3, sizeMan2 = 2, edge.color = "black", edge.label.position = 0.8)
+anova(fit_cfa_2f, fit_cfa_2f_orth, fit_cfa_2f_one, fit_cfa_2f_g)
+
+
 anova(fit_cfa, fit_cfa.one)
 ```
 
@@ -601,14 +626,34 @@ cor.test(df_all$mr,df_all$SPM, method = "spearman", exact=F, alternative = "grea
 cor.test(df_all$sc,df_all$VKMR, method = "spearman", exact=F, alternative = "greater")
 cor.test(df_all$sc,df_all$SPM, method = "spearman", exact=F, alternative = "greater")
 
+
+
+
+
 #### Structural equation model #### 
 SEM_2f <- 'MARS =~ pc + sc
           PB =~ VKMR + SPM
           MARS ~ PB'
 
-fit_SEM_2f <- sem(SEM_2f, data = df_all[,-1], std.lv=F, orthogonal = F, estimator = "MLM")  # MLM because not multivariate nomal
+fit_SEM_2f <- sem(SEM_2f, data = df_all, std.lv=F, orthogonal = F, estimator = "MLM")  # MLM because not multivariate nomal
 summary(fit_SEM_2f, standardized = T, fit.measures = T, rsq = T)
 semPaths(fit_SEM_2f, "std",cardinal = F, edge.label.cex = 0.6, curvePivot =T, layout = "tree", sizeMan = 3, sizeMan2 = 2, edge.color = "black", edge.label.position = 0.8)
+
+
+# SEM with measurement model
+df_all_wide_2 <- merge(df_all, all_wide_2, by='id')
+
+SEM_MM <- 'PC =~ pc3 + pc5 + pc6 + pc7 + pc8 + pc9 + pc10 + pc11
+          SC =~ sc6 + sc7 +sc8 + sc9+ sc10 + sc12
+          MARS =~ PC + SC
+          PB =~ VKMR + SPM
+          MARS ~ PB'
+
+fit_SEM_MM <- sem(SEM_MM, data = df_all_wide_2, std.lv=F, orthogonal = F, estimator = "MLM")  # MLM because not multivariate nomal
+summary(fit_SEM_MM, standardized = T, fit.measures = T, rsq = T)
+semPaths(fit_SEM_MM, "std",cardinal = F, edge.label.cex = 0.6, curvePivot =T, layout = 'tree2', sizeMan = 3, sizeMan2 = 2, edge.color = "black", edge.label.position = 0.8)
+
+
 
 ```
 
@@ -975,7 +1020,7 @@ vars = c('id', 'item', 'time_taken', 'distance_travelled',
 
 sc_feat <- sc %>% 
   select(vars) %>% 
-  filter(id != "sc1", id != "sc2") %>%
+  filter(id != "sc1" & id != "sc2") %>%
   group_by(id) %>%
   summarise(distance_travelled = max(as.numeric(distance_travelled), na.rm = T),
             xPos_range = diff(range(as.numeric(xPos), na.rm = T)), 
@@ -1025,10 +1070,12 @@ sc_feat_item <- sc %>%
             looking_goal = max(as.numeric(looking_goal), na.rm = T),
             looking_ratio = looking_model/looking_goal)
 
+length(sc_feat_item)
+sc_feat_item
 
 # spread variables by item 
 sc_feat_item_wide = sc_feat_item %>% select(id)
-for (i in names(sc_feat_item)[3:length(sc_feat_item)]){
+for (i in names(sc_feat_item)[3:5]){
   print(i)
   wide_temp <- sc_feat_item %>% select(id, item, i) %>% spread(key=item, value = i) 
   names(wide_temp) <- paste("sc",names(wide_temp), i, sep='_')
@@ -1073,7 +1120,10 @@ sc_feat_all %>% select(-id) %>%
 library(caret)
 library(glmnet)
 
-sc_feat_all_pred_sc <- sc_feat_all %>% select(-c(time_taken, pc, mr, VKMR, SPM, xPos_range, ray_x_range)) %>% column_to_rownames("id")
+sc_feat_all_pred_sc <- sc_feat_all %>% 
+  select(-c(pc, mr, VKMR, SPM, xPos_range, ray_x_range)) %>% 
+  column_to_rownames("id")
+
 sc_feat_all_pred_sc %>% head()
 
 in_train <- createDataPartition(y = sc_feat_all_pred_sc$sc,
@@ -1163,15 +1213,18 @@ eval_gbm
 ```{r}
 library(mlr)
 
-sc_feat_all_pred_sc <- sc_feat_all %>% select(-c(time_taken, pc, mr, VKMR, SPM)) %>% column_to_rownames("id")
+sc_feat_all_pred_sc <- sc_feat_all %>% 
+  select(-c(pc, mr, VKMR, SPM, xPos_range, ray_x_range)) %>% 
+  column_to_rownames("id")
+
 sc_feat_all_pred_sc %>% head()
 
-task_sc = TaskRegr$new(id = 'id', backend = sc_feat_all_pred_sc, target = "sc")
+task_sc = tsk(id = 'id', backend = sc_feat_all_pred_sc, target = "sc")
 task_sc
 
 lrn = lrn("regr.ranger")
 rdesc = makeResampleDesc("CV", iters = 5)
-res = mlr3::resample(learner = lrn, task = task_sc, resampling = rdesc, measure = list(RMSE))
+res = resample(learner = lrn, task = task_sc, resampling = rdesc, measure = list(RMSE))
 
 # train/test split
 train_set = sample(task_sc$nrow, 0.8 * task_sc$nrow)
@@ -1244,6 +1297,7 @@ rr_rf$resampling
 
 ```{r}
 library("mlr3tuning")
+library(mlr3)
 task = tsk("iris")
 task
 learner = lrn("classif.rpart")
