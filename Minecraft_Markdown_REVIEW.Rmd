@@ -34,7 +34,7 @@ library(eRm)
 library(foreign)
 library(xtable)
 library(stargazer)
-library(plyr)
+library(dplyr)
 library(psych)
 library(rlang)
 library(ggplot2)
@@ -52,15 +52,14 @@ library(normtest)
 library(cocor)
 library(CTT)
 library(MVN)
-library(tidyverse)
 library(Hmisc) 
-library(mlr3)
-library(mlr3viz)
-library(mlr3learners)
-library(mlr3tuning)
-library(mlr3misc)
-
-
+library(tidyverse)
+library(data.table)
+#library(mlr3)
+#library(mlr3viz)
+#library(mlr3learners)
+#library(mlr3tuning)
+#library(mlr3misc)
 
 ```
 
@@ -147,6 +146,8 @@ files_pc = list.files(pattern="*Pattern")
 
 # First apply read.csv, then rbind
 pc = do.call(rbind, lapply(files_pc, function(x) read.csv(x, sep=",", stringsAsFactors = F)))
+#write_csv(pc, 'pc.csv')
+
 
 # aggregate data to item level
 pc_agg <- aggdata(pc)
@@ -166,6 +167,7 @@ files_mr = list.files(pattern="*Mental")
 
 # First apply read.csv, then rbind
 mr = do.call(rbind, lapply(files_mr, function(x) read.csv(x, sep=",", stringsAsFactors = F)))
+write_csv(mr, 'mr.csv')
 
 # aggregate data to item level
 mr_agg <- aggdata(mr)
@@ -187,6 +189,7 @@ files_sc = list.files(pattern="*Rec")
 
 # First apply read.csv, then rbind
 sc = do.call(rbind, lapply(files_sc, function(x) read.csv(x, sep=",", stringsAsFactors = F)))
+# write_csv(sc, 'sc.csv')
 
 # aggregate data to item level
 sc_agg <- aggdata(sc)
@@ -252,13 +255,13 @@ mcexp <- merge(all_wide,dem)[,c(1,42)]
 ```{r}
 #### Exclude Items ####
 # training items 
-pc_wide <- pc_wide %>% select(-pc1, -pc2)
+pc_wide <- pc_wide %>% dplyr::select(-pc1, -pc2)
 
 # low variance
-pc_wide <- pc_wide %>% select(-pc4)
+pc_wide <- pc_wide %>% dplyr::select(-pc4)
 
 # low item fit
-pc_wide <- pc_wide %>% select(-pc12)
+pc_wide <- pc_wide %>% dplyr::select(-pc12)
 
 #### Descriptive stats ####
 descript_pc <- descript(pc_wide[,-1])
@@ -334,10 +337,10 @@ xtable(data.frame(pc_ia_tab, row.names =NULL), type = "latex")
 ```{r}
 #### Exclude items ####
 # training items
-mr_wide <- mr_wide %>% select(-mr1, -mr2)
+mr_wide <- mr_wide %>% dplyr::select(-mr1, -mr2)
 
 # low item fit
-mr_wide <- mr_wide %>% select(-mr9, -mr12, -mr11)
+mr_wide <- mr_wide %>% dplyr::select(-mr9, -mr12, -mr11)
 
 #### Descriptive stats ####
 descript_mr <- descript(mr_wide[,-1])
@@ -412,13 +415,13 @@ xtable(mr_ia_tab)
 ```{r}
 #### Exclude Items ####
 # Training items first
-sc_wide <- sc_wide %>% select(-sc1, -sc2)
+sc_wide <- sc_wide %>% dplyr::select(-sc1, -sc2)
 
 # Low variance
-sc_wide <- sc_wide %>% select(-sc3, -sc5)
+sc_wide <- sc_wide %>% dplyr::select(-sc3, -sc5)
 
 # Low item fit
-sc_wide <- sc_wide %>% select(-sc11, -sc4)
+sc_wide <- sc_wide %>% dplyr::select(-sc11, -sc4)
 
 
 #### Descriptive stats ####
@@ -598,6 +601,7 @@ df_all<- join_all(list(df_pers,dat_pen_paper), by = 'id', type = "inner")
 names(df_all) <- c("id", "pc", "mr", "sc", "VKMR", "SPM")
 head(df_all)
 dim(df_all)
+# write_csv(df_all, "df_all.csv")
 
 #### Check assumptions ####
 # multivariate and univariate normality
@@ -911,6 +915,7 @@ cohen.d(lm1$residuals~ factor(df_all_teq2$mcExperience))
 # Get times spent on tutorial test item 
 files_test = list.files(pattern="*Test")
 test = do.call(rbind, lapply(files_test, function(x) read.csv(x, sep=",", stringsAsFactors = F)))
+# write_csv(test, 'test.csv')
 test_agg <- aggdata(test)
 
 
@@ -1005,383 +1010,123 @@ gg
 
 ```
 
-# Analyze Process Data 
+## Check for sequence effects 
+### identify which group participants were in 
 
-## Failure to engage 
-
-## Exctract Process Features
 ```{r}
 
-vars = c('id', 'item', 'time_taken', 'distance_travelled', 
-         'xPos', 'yPos', 'zPos', 'Pitch', 'Yaw', 'ray.x.', 'ray.y.', 
-         'ray.z.', 'ray.distance.', 'distance_goal', 'looking_model', 
-         'looking_goal', 'steps', 'correctBlocks', 'incorrectBlocks', 
-         'answer')
+# reformat time stamps
+test_time <- test %>% 
+  group_by(id) %>% 
+  slice(1) %>% 
+  rename(time_stamp = timestamp) %>% 
+  mutate(time_stamp = as.POSIXct(time_stamp)) %>% 
+  select(id, time_stamp)
 
-sc_feat <- sc %>% 
-  select(vars) %>% 
-  filter(id != "sc1" & id != "sc2") %>%
-  group_by(id) %>%
-  summarise(distance_travelled = max(as.numeric(distance_travelled), na.rm = T),
-            xPos_range = diff(range(as.numeric(xPos), na.rm = T)), 
-            xPos_mean = mean(as.numeric(xPos), na.rm = T), 
-            yPos_range = diff(range(as.numeric(yPos), na.rm = T)), 
-            yPos_mean = mean(as.numeric(yPos), na.rm = T), 
-            zPos_range = diff(range(as.numeric(zPos), na.rm = T)),
-            zPos_mean = mean(as.numeric(zPos), na.rm = T), 
-            pitch_range = diff(range(as.numeric(Pitch), na.rm = T)),
-            pitch_mean = mean(as.numeric(Pitch), na.rm = T), 
-            yaw_range = diff(range(as.numeric(Yaw), na.rm = T)),
-            yaw_mean = mean(as.numeric(Yaw), na.rm = T),
-            ray_x_range = diff(range(as.numeric(ray.x.), na.rm = T)),
-            ray_x_mean = mean(as.numeric(ray.x.), na.rm = T),
-            ray_y_range = diff(range(as.numeric(ray.y.), na.rm = T)),
-            ray_z_mean = mean(as.numeric(ray.z.), na.rm = T),
-            ray_dist_range = diff(range(as.numeric(ray.distance.), na.rm = T)),
-            ray_dist_mean = mean(as.numeric(ray.distance.), na.rm = T), 
-            looking_model = max(as.numeric(looking_model), na.rm = T),
-            looking_goal = max(as.numeric(looking_goal), na.rm = T),
-            looking_ratio = looking_model/looking_goal)
- 
-sc_feat %>% head()
+# find groups
+test_time <- test_time %>% mutate(first_sess = time_stamp >= "2017-10-29 22:45:00" & time_stamp <= "2017-10-29 23:45:00" |
+                       time_stamp >= "2017-11-15 01:10:00" & time_stamp <= "2017-11-15 02:10:00" |
+                       time_stamp >= "2017-11-15 23:10:00" & time_stamp <= "2017-11-16 00:10:00", 
+                     second_sess = time_stamp >= "2017-10-30 00:55:00" & time_stamp <= "2017-10-30 01:55:00" |
+                       time_stamp >= "2017-11-15 03:10:00" & time_stamp <= "2017-11-15 04:10:00" |
+                       time_stamp >= "2017-11-16 00:40:00" & time_stamp <= "2017-11-16 01:40:00") %>%
+  filter(first_sess == 1 | second_sess == 1)
 
-sc_feat_item <- sc %>% 
-  select(vars) %>% 
-  filter(id != "sc1" & id != "sc2") %>%
-  group_by(id, item) %>%
-  summarise(distance_travelled = max(as.numeric(distance_travelled), na.rm = T),
-            xPos_range = diff(range(as.numeric(xPos), na.rm = T)), 
-            xPos_mean = mean(as.numeric(xPos), na.rm = T), 
-            yPos_range = diff(range(as.numeric(yPos), na.rm = T)), 
-            yPos_mean = mean(as.numeric(yPos), na.rm = T), 
-            zPos_range = diff(range(as.numeric(zPos), na.rm = T)),
-            zPos_mean = mean(as.numeric(zPos), na.rm = T), 
-            pitch_range = diff(range(as.numeric(Pitch), na.rm = T)),
-            pitch_mean = mean(as.numeric(Pitch), na.rm = T), 
-            yaw_range = diff(range(as.numeric(Yaw), na.rm = T)),
-            yaw_mean = mean(as.numeric(Yaw), na.rm = T),
-            ray_x_range = diff(range(as.numeric(ray.x.), na.rm = T)),
-            ray_x_mean = mean(as.numeric(ray.x.), na.rm = T),
-            ray_y_range = diff(range(as.numeric(ray.y.), na.rm = T)),
-            ray_z_mean = mean(as.numeric(ray.z.), na.rm = T),
-            ray_dist_range = diff(range(as.numeric(ray.distance.), na.rm = T)),
-            ray_dist_mean = mean(as.numeric(ray.distance.), na.rm = T), 
-            looking_model = max(as.numeric(looking_model), na.rm = T),
-            looking_goal = max(as.numeric(looking_goal), na.rm = T),
-            looking_ratio = looking_model/looking_goal)
+# calculate means
+test_time_all <- test_time %>% inner_join(df_all, by ='id')
+test_time_all %>% 
+  group_by(first_sess) %>% 
+  summarise(mean(pc), 
+            mean(mr), 
+            mean(sc),
+            mean(SPM),
+            mean(VKMR))
 
-length(sc_feat_item)
-sc_feat_item
+# conduct t-tests
+t.test(pc ~ first_sess, data = test_time_all)
+t.test(mr ~ first_sess, data = test_time_all)
+t.test(sc ~ first_sess, data = test_time_all)
+t.test(SPM ~ first_sess, data = test_time_all)
+t.test(VKMR ~ first_sess, data = test_time_all)
 
-# spread variables by item 
-sc_feat_item_wide = sc_feat_item %>% select(id)
-for (i in names(sc_feat_item)[3:5]){
-  print(i)
-  wide_temp <- sc_feat_item %>% select(id, item, i) %>% spread(key=item, value = i) 
-  names(wide_temp) <- paste("sc",names(wide_temp), i, sep='_')
-  names(wide_temp)[1] <- "id"
-  
-  sc_feat_item_wide = sc_feat_item_wide %>% join(wide_temp, by="id")
-}
-
-sc_feat_item_wide %>% head()
+```
 
 
+## Analyze completion times 
 
+```{r}
+sc <- read.csv('sc.csv')
+
+sc$time_taken[1:300]
+
+
+sc %>% mutate(time_taken = as.numeric(as.character(time_taken))) %>% group_by(id, item) %>% summarise(max(time_taken))
+
+
+pc %>% mutate(time_taken = as.numeric(as.character(time_taken))) %>% 
+  group_by(id, item) %>% 
+  slice(n()) %>% 
+  group_by(answer) %>% 
+  summarise(mean(time_taken, na.rm=T))
+
+pc %>% mutate(time_taken = as.numeric(as.character(time_taken))) %>% 
+  group_by(id, item) %>% 
+  slice(n()) %>% 
+  ungroup() %>%
+  summarise(mean(time_taken, na.rm=T))
+
+
+mr %>% mutate(time_taken = as.numeric(as.character(time_taken))) %>% 
+  group_by(id, item) %>% 
+  slice(n()) %>% 
+  group_by(answer) %>% 
+  summarise(mean(time_taken, na.rm=T))
+
+mr %>% mutate(time_taken = as.numeric(as.character(time_taken))) %>% 
+  group_by(id, item) %>% 
+  slice(n()) %>% 
+  ungroup() %>%
+  summarise(mean(time_taken, na.rm=T))
+
+sc %>% mutate(time_taken = as.numeric(as.character(time_taken))) %>% 
+  group_by(id, item) %>% 
+  slice(n()) %>% 
+  group_by(answer) %>% 
+  summarise(mean(time_taken, na.rm=T))
+
+sc %>% mutate(time_taken = as.numeric(as.character(time_taken))) %>% 
+  group_by(id, item) %>% 
+  slice(n()) %>% 
+  ungroup() %>%
+  summarise(mean(time_taken, na.rm=T))
 
 
 
 ```
 
-```{r}
-# correlation table 
-sc_feat_all <- sc_feat %>% inner_join(df_all, by="id") 
-sc_feat_all %>% select(-id) %>% 
-  cor() %>% 
-  as.data.frame() %>% 
-  rownames_to_column() %>% 
-  filter(rowname %in% c("pc", "mr", "sc", "VKMR", "SPM"))
-
-
-# correlation table 
-sc_feat_all_item_wide <- sc_feat_item_wide %>% inner_join(df_all, by="id") 
-sc_feat_all %>% select(-id) %>% 
-  cor() %>% 
-  as.data.frame() %>% 
-  rownames_to_column() %>% 
-  filter(rowname %in% c("pc", "mr", "sc", "VKMR", "SPM"))
-
-
-```
-
-# Predict SC Scores From Process Data (Carret )
-## Train-test Split
-```{r}
-library(caret)
-library(glmnet)
-
-sc_feat_all_pred_sc <- sc_feat_all %>% 
-  select(-c(pc, mr, VKMR, SPM, xPos_range, ray_x_range)) %>% 
-  column_to_rownames("id")
-
-sc_feat_all_pred_sc %>% head()
-
-in_train <- createDataPartition(y = sc_feat_all_pred_sc$sc,
-                                p = 0.7, list = FALSE)
-
-training <- sc_feat_all_pred_sc[ in_train, ]
-testing  <- sc_feat_all_pred_sc[-in_train, ]
-
-dim(training)
-training
-
-```
-
-## Baseline - Linear Model
-```{r}
-ctrl <- trainControl(method = "cv", number = 10)
-
-mdl_lm <- caret::train(sc ~ ., data = training, method = "lm", 
-             preProcess = c("center", "scale"), 
-             trControl = ctrl)
-
-y_pred_lm_cesd <- predict(mdl_lm, newdata = testing)
-
-eval_lm <- defaultSummary(data.frame(obs = testing$sc, pred = y_pred_lm_cesd))
-eval_lm
-```
-
-## Penalized Linear Model
-```{r}
-ctrl <- trainControl(method = "cv", number = 10)
-
-Grid <- expand.grid(.lambda = seq(.05, 1, length = 10),
-                    .alpha = seq(.05, 1, length = 10))
-
-mdl_enet <- caret::train(sc ~ ., data = training, method = "glmnet",
-                  preProcess = c("center", "scale"),
-                  trControl = ctrl, tuneGrid = Grid)
-
-y_pred_elnet <- predict(mdl_enet, newdata = testing)
-
-eval_enet <- defaultSummary(data.frame(obs = testing$sc, pred = y_pred_elnet))
-eval_enet
-```
-
-## Random Forest Regression
-```{r}
-rf_grid <- data.frame(.mtry = 2:(ncol(training) - 1L))
-ctrl <- trainControl(method = "cv", number = 5)
-
-mdl_rf <- caret::train(sc ~ .,
-             data = training, method = "rf",
-             ntrees = 100, importance = TRUE,
-             tuneGrid = rf_grid,
-             trControl = ctrl
-             )
-
-y_pred_rf <- predict(mdl_rf, newdata = testing)
-
-eval_rf <- defaultSummary(data.frame(obs = testing$sc, pred = y_pred_rf))
-eval_rf
-```
-
-## Gradient Boostinf
-```{r}
-bm_grid <- expand.grid(.interaction.depth = seq(1, 7, by = 2),
-                        .n.trees = seq(100, 1000, by = 50),
-                        .shrinkage = c(0.01, 0.1),
-                        .n.minobsinnode = 1:10)
-
-ctrl <- trainControl(method = "cv", number = 5)
-
-mdl_gbm <- caret::train(sc ~ ., data = training, method = "gbm",
-             trControl = ctrl, 
-             tuneGrid = gbm_grid, 
-             verbose = FALSE)
-
-y_pred_gbm <- predict(mdl_gbm, newdata = testing)
-
-eval_gbm <- defaultSummary(data.frame(obs = testing$sc, pred = y_pred_gbm))
-eval_gbm
-```
-
-
-
-# Try MLR
-# Predict SC scores
-```{r}
-library(mlr)
-
-sc_feat_all_pred_sc <- sc_feat_all %>% 
-  select(-c(pc, mr, VKMR, SPM, xPos_range, ray_x_range)) %>% 
-  column_to_rownames("id")
-
-sc_feat_all_pred_sc %>% head()
-
-task_sc = tsk(id = 'id', backend = sc_feat_all_pred_sc, target = "sc")
-task_sc
-
-lrn = lrn("regr.ranger")
-rdesc = makeResampleDesc("CV", iters = 5)
-res = resample(learner = lrn, task = task_sc, resampling = rdesc, measure = list(RMSE))
-
-# train/test split
-train_set = sample(task_sc$nrow, 0.8 * task_sc$nrow)
-test_set = setdiff(seq_len(task_sc$nrow), train_set)
-
-# train the model
-lrn$train(task_sc, row_ids = train_set)
-
-# predict data
-prediction = lrn$predict(task_sc, row_ids = test_set)
-
-# calculate performance
-prediction$score()
-
-measure = msr("regr.rsq")
-
-# automatic resampling
-resampling = rsmp("cv", folds = 10)
-rr = resample(task = task_sc, lrn, resampling)
-rr$resampling
-rr$score(measure)
-
-```
-
-## With nested CV
-```{r}
-library(paradox)
-
-data("Boston")
-Boston
-
-# create task with target sc 
-task_sc = TaskRegr$new(id = 'predict_sc', backend = Boston, target = "tax")
-task_sc
-
-# get overview of learners
-mlr_learners
-
-# create learner with rf algorithm 
-lrn_rf = lrn("regr.glmnet")
-lrn_rf$param_set
-
-# define inner resampling strategy
-rsmp_inner = rsmp("cv", folds=5)
-
-# define evaluation metric
-measures = msr("regr.rsq")
-
-# define param grid
-param_set = paradox::ParamSet$new(
-  params = list(paradox::ParamDbl$new("lambda", lower = 0.001, upper = 0.11)))
-param_set
-
-# define stop criterion for parameter search
-terminator = term("evals", n_evals = 5)
-tuner = tnr("grid_search", resolution = 10)
-
-# define parameter tuning strategy
-at_rf = AutoTuner$new(lrn_rf, rsmp_inner, measures = measures, tune_ps = 
-  param_set, terminator, tuner = tuner)
-
-# define outer resampling strategy
-rsmp_outer = rsmp("cv", folds = 5)
-rr_rf = mlr3::resample(task = task_sc, learner = at_rf, resampling = rsmp_outer)
-
-rr_rf$resampling
-
-```
-
-
-```{r}
-library("mlr3tuning")
-library(mlr3)
-task = tsk("iris")
-task
-learner = lrn("classif.rpart")
-learner
-resampling = rsmp("holdout")
-resampling
-measures = msr("classif.ce")
-measures
-param_set = paradox::ParamSet$new(
-  params = list(paradox::ParamDbl$new("cp", lower = 0.001, upper = 0.1)))
-param_set
-terminator = term("evals", n_evals = 5)
-terminator
-tuner = tnr("grid_search", resolution = 10)
-tuner
-at = AutoTuner$new(learner, resampling, measures = measures,
-  param_set, terminator, tuner = tuner)
-
-resampling_outer = rsmp("cv", folds = 3)
-rr = resample(task = task, learner = at, resampling = resampling_outer)
-```
-
-
-
-## Predict VKMR scores 
-```{r}
-sc_feat_all_pred_vkmr <- sc_feat_all %>% select(-c(time_taken, pc, mr, sc, SPM)) %>% column_to_rownames("id")
-sc_feat_all_pred_vkmr %>% head()
-
-task_vkmr = TaskRegr$new(id = 'id', backend = sc_feat_all_pred_vkmr, target = "VKMR")
-task_vkmr
-
-mlr_learners
-
-lrn = lrn("regr.ranger")
-rdesc = makeResampleDesc("CV", iters = 5)
-res = resample(learner = lrn, task = regr.task, resampling = rdesc, measure = list(RMSE))
-
-# train/test split
-train_set = sample(task_vkmr$nrow, 0.8 * task_vkmr$nrow)
-test_set = setdiff(seq_len(task_vkmr$nrow), train_set)
-
-# train the model
-lrn$train(task_vkmr, row_ids = train_set)
-
-# predict data
-prediction = lrn$predict(task_sc, row_ids = test_set)
-
-# calculate performance
-prediction$score()
-
-measure = msr("regr.rsq")
-
-# automatic resampling
-resampling = rsmp("cv", folds = 10)
-rr = resample(task_vkmr, lrn, resampling)
-rr$score(measure)
-```
-
-
-
-
-## Analyze Narrative Time 
+## Analyze Narrative Time (might delete)
 ```{r}
 
 pc_narrative <- pc %>% 
-  select(id, narrative_time) %>% 
-  rename(pc_narrative_time = narrative_time) %>% 
-  group_by(id) %>% 
+  dplyr::select(id, narrative_time) %>% 
+  dplyr::rename(pc_narrative_time = narrative_time) %>% 
+  dplyr::group_by(id) %>% 
   summarise(pc_narrative_time = max(pc_narrative_time))
 
 mr_narrative <- mr %>% 
-  select(id, narrative_time) %>% 
-  rename(mr_narrative_time = narrative_time) %>% 
-  group_by(id) %>% 
+  dplyr::select(id, narrative_time) %>% 
+  dplyr::rename(mr_narrative_time = narrative_time) %>% 
+  dplyr::group_by(id) %>% 
   summarise(mr_narrative_time = max(mr_narrative_time))
 
 sc_narrative <- sc %>% 
-  select(id, narrative_time) %>% 
-  rename(sc_narrative_time = narrative_time) %>% 
-  group_by(id) %>% 
+  dplyr::select(id, narrative_time) %>% 
+  dplyr::rename(sc_narrative_time = narrative_time) %>% 
+  dplyr::group_by(id) %>% 
   summarise(sc_narrative_time = max(sc_narrative_time))
 
-df_narrative = join_all(list(df_all, pc_narrative, mr_narrative, sc_narrative), by = 'id')
+pc_narrative
+df_narrative = plyr::join_all(list(df_all, pc_narrative, mr_narrative, sc_narrative), by = 'id')
 
 df_narrative <- df_narrative %>% mutate(sum_narrative_time  = pc_narrative_time+mr_narrative_time+sc_narrative_time)
 
@@ -1389,3 +1134,8 @@ cor(df_narrative)
 
 ```
 
+## CTT Analyses 
+```{r}
+all_wide
+
+```
