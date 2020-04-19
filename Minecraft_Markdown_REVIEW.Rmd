@@ -242,12 +242,43 @@ names(pc_wide)[1] <- "id"
 names(mr_wide)[1] <- "id"
 names(sc_wide)[1] <- "id"
 
+# copy dfs for ctt analyses 
+pc_ctt <- pc_wide
+mr_ctt <- mr_wide
+sc_ctt <- sc_wide
+
 # Create vectors for differential item functioning
 dem <- aggdata_dem(pc)
 gender <- merge(all_wide,dem)[,c(1,39)]
 mcexp <- merge(all_wide,dem)[,c(1,42)]
 
 ```
+
+
+# CTT ANALYSES
+
+```{r}
+
+pc_ctt <- pc_ctt %>% dplyr::select(-pc1, -pc2)
+mr_ctt <- mr_ctt %>% dplyr::select(-mr1, -mr2)
+sc_ctt <- sc_ctt %>% dplyr::select(-sc1, -sc2)
+
+
+descript(pc_ctt[-1])
+descript(mr_ctt[-1])
+descript(sc_ctt[-1])
+
+pc_ctt <- pc_ctt %>% mutate(pc_ctt =  rowSums(.[2:11])) %>% 
+  dplyr::select(-c(pc3:pc12))
+mr_ctt <- mr_ctt %>% mutate(mr_ctt =  rowSums(.[2:11])) %>% 
+  dplyr::select(-c(mr3:mr12))
+sc_ctt <- sc_ctt %>% mutate(sc_ctt =  rowSums(.[2:11])) %>% 
+  dplyr::select(-c(sc3:sc12))
+
+```
+
+
+
 
 
 # ITEM ANALYSIS PC (eRm)
@@ -497,6 +528,27 @@ xtable(sc_ia_tab)
 ```
 
 
+# Compare IRT and CTT scales
+```{r}
+
+# Get IRT scores 
+pc_irt <- data.frame(pc_wide$id, coef(pres_pc))
+mr_irt <- data.frame(mr_wide$id, coef(pres_mr))
+sc_irt <- data.frame(sc_wide$id, coef(pres_sc))
+
+names(pc_irt) <- c("id", 'pc_irt')
+names(mr_irt) <- c("id", 'mr_irt')
+names(sc_irt) <- c("id", 'sc_irt')
+
+all_scores = join_all(list(pc_irt, mr_irt, sc_irt, pc_ctt, mr_ctt, sc_ctt), by='id')
+
+all_scores[-1] %>% cor()
+
+```
+
+
+
+
 # FACTOIAL VALIDITY
 ```{r}
 #### Confirmatory factor analysis ####
@@ -597,6 +649,7 @@ names(sc_pers)[1] <- "id"
 
 # Merge MARS data with SPM and VKMR data
 df_pers<- join_all(list(pc_pers, mr_pers, sc_pers), by = 'id')
+#df_pers<- join_all(list(pc_ctt, mr_ctt, sc_ctt), by = 'id') # running analyses on ctt scores
 df_all<- join_all(list(df_pers,dat_pen_paper), by = 'id', type = "inner")
 names(df_all) <- c("id", "pc", "mr", "sc", "VKMR", "SPM")
 head(df_all)
@@ -629,8 +682,6 @@ cor.test(df_all$mr,df_all$VKMR, method = "spearman", exact=F, alternative = "gre
 cor.test(df_all$mr,df_all$SPM, method = "spearman", exact=F, alternative = "greater")
 cor.test(df_all$sc,df_all$VKMR, method = "spearman", exact=F, alternative = "greater")
 cor.test(df_all$sc,df_all$SPM, method = "spearman", exact=F, alternative = "greater")
-
-
 
 
 

@@ -36,9 +36,11 @@ df_all <- read.csv('df_all.csv')
 
 ```
 
+
+
+
+
 # Analyze Process Data 
-
-
 
 ## Exctract Process Features - SC
 ```{r}
@@ -57,20 +59,28 @@ sc_feat <- sc %>%
   dplyr::summarize(distance_travelled = max(as.numeric(distance_travelled), na.rm = T),
             xPos_range = diff(range(as.numeric(xPos), na.rm = T)), 
             xPos_mean = mean(as.numeric(xPos), na.rm = T), 
+            xPos_sd = sd(as.numeric(xPos), na.rm = T), 
             yPos_range = diff(range(as.numeric(yPos), na.rm = T)), 
             yPos_mean = mean(as.numeric(yPos), na.rm = T), 
+            yPos_sd = sd(as.numeric(yPos), na.rm = T), 
             zPos_range = diff(range(as.numeric(zPos), na.rm = T)),
             zPos_mean = mean(as.numeric(zPos), na.rm = T), 
+            zPos_sd = sd(as.numeric(zPos), na.rm = T), 
             pitch_range = diff(range(as.numeric(Pitch), na.rm = T)),
             pitch_mean = mean(as.numeric(Pitch), na.rm = T), 
+            pitch_sd = sd(as.numeric(Pitch), na.rm = T), 
             yaw_range = diff(range(as.numeric(Yaw), na.rm = T)),
             yaw_mean = mean(as.numeric(Yaw), na.rm = T),
+            yaw_sd = sd(as.numeric(Yaw), na.rm = T),
             ray_x_range = diff(range(as.numeric(ray.x.), na.rm = T)),
             ray_x_mean = mean(as.numeric(ray.x.), na.rm = T),
+            ray_x_sd = sd(as.numeric(ray.x.), na.rm = T),
             ray_y_range = diff(range(as.numeric(ray.y.), na.rm = T)),
             ray_z_mean = mean(as.numeric(ray.z.), na.rm = T),
+            ray_z_sd = sd(as.numeric(ray.z.), na.rm = T),
             ray_dist_range = diff(range(as.numeric(ray.distance.), na.rm = T)),
             ray_dist_mean = mean(as.numeric(ray.distance.), na.rm = T), 
+            ray_dist_sd = sd(as.numeric(ray.distance.), na.rm = T), 
             looking_model = max(as.numeric(looking_model), na.rm = T),
             looking_goal = max(as.numeric(looking_goal), na.rm = T),
             looking_ratio = looking_model/looking_goal) %>%
@@ -133,7 +143,7 @@ dim(sc_feat_item_wide)
 ```{r}
 
 sc_feat_all <- sc_feat %>% inner_join(df_all, by="id") 
-sc_feat_all_item_wide <- sc_feat_item_wide %>% inner_join(df_all, by="id") 
+#sc_feat_all_item_wide <- sc_feat_item_wide %>% inner_join(df_all, by="id") 
 
 
 
@@ -210,16 +220,15 @@ nested_cv <- function(data, target, inner_method = 'cv', inner_number = 10,
     training <- data[ in_train, ]
     testing  <- data[-in_train, ]
     
-    X_train <- training %>% select(-target)
+    X_train <- training %>% dplyr::select(-all_of(target))
     y_train <- training[[target]] 
     
-    X_test <- testing %>% select(-target)
+    X_test <- testing %>% dplyr::select(-all_of(target))
     y_test <- testing[[target]]
   
     
     #### LASSO
     # parameter tuning in inner loop
-    print('Hyperparameter selection LASSO')
     mdl_enet_inner <- caret::train(X_train, y_train, method = "glmnet",
                                    preProcess = c("center", "scale"),
                                    trControl = ctrl, 
@@ -240,7 +249,6 @@ nested_cv <- function(data, target, inner_method = 'cv', inner_number = 10,
   
     #### random forest
     # parameter tuning in inner loop
-    print('Hyperparameter selection RF')
     mdl_rf_inner <- caret::train(X_train, y_train, data = training, method = "rf",
                                  preProcess = c("center", "scale"),
                                  ntrees = 1000, importance = TRUE,
@@ -278,13 +286,43 @@ sc_feat_all_pred_sc <- sc_feat_all %>%
 cv_results_sc <- nested_cv(data = sc_feat_all_pred_sc, target = 'sc')
 
 cv_results_sc$enet %>% as.data.frame() %>% map_dbl(mean)
+cv_results_sc$rf %>% as.data.frame() %>% map_dbl(mean)
 
+cv_results_sc$enet
+cv_results_sc$rf
 ```
 
 
+
+## Predict MR Scores From Aggregate Process Data
 ```{r}
+
+sc_feat_all_pred_mr <- sc_feat_all %>% 
+  dplyr::select(-c(pc, sc, SPM, VKMR, xPos_range, ray_x_range)) %>% 
+  column_to_rownames("id")
+
+cv_results_mr <- nested_cv(data = sc_feat_all_pred_mr, target = 'mr')
+
+cv_results_mr$enet %>% as.data.frame() %>% replace( is.na(.), 0) %>% map_dbl(mean)
+cv_results_mr$rf %>% as.data.frame() %>% replace( is.na(.), 0) %>% map_dbl(mean)
+cv_results_mr
+
 ```
 
+## Predict PC Scores From Aggregate Process Data
+```{r}
+
+sc_feat_all_pred_pc <- sc_feat_all %>% 
+  dplyr::select(-c(mr, sc, SPM, VKMR, xPos_range, ray_x_range)) %>% 
+  column_to_rownames("id")
+
+cv_results_pc <- nested_cv(data = sc_feat_all_pred_pc, target = 'pc')
+
+cv_results_pc$enet %>% as.data.frame() %>% replace( is.na(.), 0) %>% map_dbl(mean)
+cv_results_pc$rf %>% as.data.frame() %>% replace( is.na(.), 0) %>% map_dbl(mean)
+
+
+```
 
 
 ## Predict VKMR Scores From Aggregate Process Data
@@ -296,6 +334,8 @@ sc_feat_all_pred_vkmr <- sc_feat_all %>%
 
 cv_results_vkmr <- nested_cv(data = sc_feat_all_pred_vkmr, target = 'VKMR')
 
+cv_results_vkmr$enet %>% as.data.frame() %>% map_dbl(mean)
+
 
 ```
 
@@ -303,259 +343,26 @@ cv_results_vkmr <- nested_cv(data = sc_feat_all_pred_vkmr, target = 'VKMR')
 ## Predict SPM Scores From Aggregate Process Data
 ```{r}
 
-sc_feat_all_pred_sc <- sc_feat_all %>% 
+sc_feat_all_pred_spm <- sc_feat_all %>% 
   dplyr::select(-c(pc, mr, sc, VKMR, xPos_range, ray_x_range)) %>% 
   column_to_rownames("id")
 
-sc_feat_all_pred_sc %>% head()
+cv_results_spm <- nested_cv(data = sc_feat_all_pred_spm, target = 'SPM')
 
-in_train <- createDataPartition(y = sc_feat_all_pred_sc$SPM,
-                                p = 0.7, list = FALSE)
-
-training <- sc_feat_all_pred_sc[ in_train, ]
-testing  <- sc_feat_all_pred_sc[-in_train, ]
+cv_results_spm$enet %>% as.data.frame() %>% replace( is.na(.), 0) %>% map_dbl(mean)
 
 
 ```
 
 
-### Baseline - Linear Model
-```{r}
-ctrl <- trainControl(method = "cv", number = 10)
-
-mdl_lm <- caret::train(SPM ~ ., data = training, method = "lm", 
-             preProcess = c("center", "scale"), 
-             trControl = ctrl)
-
-y_pred_lm_spm <- predict(mdl_lm, newdata = testing)
-
-eval_lm <- defaultSummary(data.frame(obs = testing$SPM, pred = y_pred_lm_spm))
-eval_lm
-
-```
 
 
-
-
-
-## Predict SC Scores From Item-level Process Data (caret)
-### Train-test Split
+# Cluster Analysis of Solution Strategies 
 ```{r}
 
-#sc_feat_all_item_wide %>% colnames() %>% str_detect('xPos_range')
-
-sc_feat_all_item_wide_pred_sc <- sc_feat_all_item_wide %>% 
-  dplyr::select(-c(pc, mr, VKMR, SPM)) %>% 
-  column_to_rownames("id")
-
-sc_feat_all_item_wide_pred_sc %>% head()
-
-in_train <- createDataPartition(y = sc_feat_all_item_wide_pred_sc$sc,
-                                p = 0.7, list = FALSE)
-
-training <- sc_feat_all_item_wide_pred_sc[ in_train, ]
-testing  <- sc_feat_all_item_wide_pred_sc[-in_train, ]
-
-dim(training)
-dim(testing)
-
-```
-```{r}
-ctrl <- trainControl(method = "cv", number = 10)
-
-Grid <- expand.grid(.lambda = seq(.05, 1, length = 10),
-                    .alpha = seq(.05, 1, length = 10))
-
-mdl_enet <- caret::train(sc ~ ., data = training, method = "glmnet",
-                  preProcess = c("medianImpute", "center", "scale", "nzv"),
-                  trControl = ctrl, tuneGrid = Grid)
-
-y_pred_elnet <- predict(mdl_enet, newdata = testing)
-
-eval_enet <- defaultSummary(data.frame(obs = testing$sc, pred = y_pred_elnet))
-eval_enet
-```
-
-
-
-# Try MLR
-# Predict SC scores
-```{r}
-library(mlr3)
-library(mlr3learners)
-library(mlr3tuning)
-library(paradox)
-
-sc_feat_all_pred_sc <- sc_feat_all %>% 
-  dplyr::select(-c(pc, mr, VKMR, SPM, xPos_range, ray_x_range)) %>% 
-  column_to_rownames("id")
-
-sc_feat_all_pred_sc %>% head()
-
-task_sc = tsk(id = 'id', backend = sc_feat_all_pred_sc, target = "sc")
-task_sc
-
-lrn = lrn("regr.ranger")
-rdesc = makeResampleDesc("CV", iters = 5)
-res = resample(learner = lrn, task = task_sc, resampling = rdesc, measure = list(RMSE))
-
-# train/test split
-train_set = sample(task_sc$nrow, 0.8 * task_sc$nrow)
-test_set = setdiff(seq_len(task_sc$nrow), train_set)
-
-# train the model
-lrn$train(task_sc, row_ids = train_set)
-
-# predict data
-prediction = lrn$predict(task_sc, row_ids = test_set)
-
-# calculate performance
-prediction$score()
-
-measure = msr("regr.rsq")
-
-# automatic resampling
-resampling = rsmp("cv", folds = 10)
-rr = resample(task = task_sc, lrn, resampling)
-rr$resampling
-rr$score(measure)
-
-```
-
-## With nested CV
-```{r}
-library(paradox)
-
-data("Boston")
-Boston
-
-# create task with target sc 
-task_sc = TaskRegr$new(id = 'predict_sc', backend = Boston, target = "tax")
-task_sc
-
-# get overview of learners
-mlr_learners
-
-# create learner with rf algorithm 
-lrn_rf = lrn("regr.glmnet")
-lrn_rf$param_set
-
-# define inner resampling strategy
-rsmp_inner = rsmp("cv", folds=5)
-
-# define evaluation metric
-measures = msr("regr.rsq")
-
-# define param grid
-param_set = paradox::ParamSet$new(
-  params = list(paradox::ParamDbl$new("lambda", lower = 0.001, upper = 0.11)))
-param_set
-
-# define stop criterion for parameter search
-terminator = term("evals", n_evals = 5)
-tuner = tnr("grid_search", resolution = 10)
-
-# define parameter tuning strategy
-at_rf = AutoTuner$new(lrn_rf, rsmp_inner, measures = measures, tune_ps = 
-  param_set, terminator, tuner = tuner)
-
-# define outer resampling strategy
-rsmp_outer = rsmp("cv", folds = 5)
-rr_rf = mlr3::resample(task = task_sc, learner = at_rf, resampling = rsmp_outer)
-
-rr_rf$resampling
-
-```
-
-
-```{r}
-library("mlr3tuning")
-library(mlr3)
-
-task = tsk("iris")
-task
-learner = lrn("classif.rpart")
-learner
-resampling = rsmp("holdout")
-resampling
-measures = msr("classif.ce")
-measures
-param_set = paradox::ParamSet$new(
-  params = list(paradox::ParamDbl$new("cp", lower = 0.001, upper = 0.1)))
-param_set
-terminator = term("evals", n_evals = 5)
-terminator
-tuner = tnr("grid_search", resolution = 10)
-tuner
-at = AutoTuner$new(learner, resampling, measures = measures,
-  param_set, terminator, tuner = tuner)
-
-resampling_outer = rsmp("cv", folds = 3)
-rr = resample(task = task, learner = at, resampling = resampling_outer)
-```
-
-
-
-## Predict VKMR scores 
-```{r}
-
-# generate time_taken variable 
-
-sc_feat_all_pred_vkmr <- sc_feat_all %>% dplyr::select(-c(time_taken, pc, mr, sc, SPM)) %>% column_to_rownames("id")
-sc_feat_all_pred_vkmr %>% head()
-
-task_vkmr = TaskRegr$new(id = 'id', backend = sc_feat_all_pred_vkmr, target = "VKMR")
-task_vkmr
-
-mlr_learners
-
-lrn = lrn("regr.ranger")
-rdesc = makeResampleDesc("CV", iters = 5)
-res = resample(learner = lrn, task = regr.task, resampling = rdesc, measure = list(RMSE))
-
-# train/test split
-train_set = sample(task_vkmr$nrow, 0.8 * task_vkmr$nrow)
-test_set = setdiff(seq_len(task_vkmr$nrow), train_set)
-
-# train the model
-lrn$train(task_vkmr, row_ids = train_set)
-
-# predict data
-prediction = lrn$predict(task_sc, row_ids = test_set)
-
-# calculate performance
-prediction$score()
-
-measure = msr("regr.rsq")
-
-# automatic resampling
-resampling = rsmp("cv", folds = 10)
-rr = resample(task_vkmr, lrn, resampling)
-rr$score(measure)
 ```
 
 
 
 
-
-
-
-```{r}
-library("mlr3tuning")
-iris
-
-
-task = tsk(iris)
-
-
-learner = lrn("classif.rpart")
-resampling = rsmp("holdout")
-measures = msr("classif.ce")
-param_set = paradox::ParamSet$new(params = list(paradox::ParamDbl$new("cp", lower = 0.001, upper = 0.1)))
-terminator = term("evals", n_evals = 5)
-tuner = tnr("grid_search", resolution = 10)
-
-at = AutoTuner$new(learner, resampling, measures = measures,
-  param_set, terminator, tuner = tuner)
-```
 
