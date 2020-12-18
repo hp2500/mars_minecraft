@@ -40,125 +40,7 @@ df_all <- read.csv('df_all.csv')
 
 ```
 
-# Define cross validation functions
-```{r}
-
-nested_cv_clf <- function(data, target, inner_method = 'cv', inner_number = 10,
-                      outer_method = 'kfold', outer_number = 10, p_mc = 0.75,
-                      imb_sampling = NULL,
-                      random_seed = NULL){
-            
-  # cross validation strategy for inner loop
-  ctrl <- trainControl(method = "cv", number = inner_number,
-                       sampling = imb_sampling)
-  
-  # parameter grid for elastic net
-  enet_grid <- expand.grid(.lambda = seq(.05, 1, length = 5),
-                      .alpha = seq(.05, 1, length = 5))
-  
-  # parameter grid for random forest
-  rf_grid <- data.frame(.mtry = seq(2, (ncol(data) * 0.8), 5))
-  
-  
-  # create empty list for results
-  cv_results <- list('enet' = NULL, 'rf' = NULL)
-  
-  # create folds for outer k-fold cv
-  set.seed(random_seed)
-  kfolds <- rep(1:outer_number, length.out = nrow(data)) %>% sample(replace = F)
-
-  # nested cross validation loop 
-  for (i in 1:outer_number){
-    
-    print(paste('Outer loop:', i))
-    
-    # set random seed 
-    set.seed(i)
-    
-    # train test split outer loop
-    if (outer_method == 'monte_carlo'){
-    in_train <- createDataPartition(y = data[[target]],
-                                  p = p_mc, list = FALSE)
-    }
-    
-    if (outer_method == 'kfold'){
-    in_train <- which(kfolds != i)
-    }
-  
-    training <- data[ c(in_train), ]
-    testing  <- data[-c(in_train), ]
-    
-    X_train <- training %>% dplyr::select(-all_of(target))
-    y_train <- training[[target]]
-    
-    X_test <- testing %>% dplyr::select(-all_of(target))
-    y_test <- testing[[target]]
-    
-    
-    #### LASSO
-    # parameter tuning in inner loop
-    mdl_enet_inner <- caret::train(data.matrix(X_train), y_train, method = "glmnet",
-                                   preProcess = c('nzv', "center", "scale"),
-                                   trControl = ctrl, 
-                                   tuneGrid = enet_grid)
-    
-    # evaluate on test set in outer loop 
-    y_prob_enet <- predict(mdl_enet_inner, newdata = X_test, type = "prob")[,2]
-    y_pred_enet <- predict(mdl_enet_inner, newdata = X_test)
-    
-    tryCatch({
-        conf_mat_enet <- confusionMatrix(y_pred_enet, y_test)
-        roc_enet <- roc(y_test, y_prob_enet)
-        AUC <- auc(roc_enet)},
-      error = function(cond){
-        message('AUC was not computed')
-        AUC = NA},
-      finally = {})
-    
-    eval_enet <- cbind(t(data.frame(conf_mat_enet$overall)), 
-                         t(data.frame(conf_mat_enet$byClass)), 
-                         data.frame(AUC))
-    
-    cv_results[[1]] <-  cv_results[[1]] %>% rbind(eval_enet)
-    
-    #### random forest
-    # parameter tuning in inner loop
-    mdl_rf_inner <- caret::train(data.matrix(X_train), y_train, data = training, method = "rf",
-                                 preProcess = c('nzv', "center", "scale"),
-                                 ntrees = 1000, importance = TRUE,
-                                 tuneGrid = rf_grid,
-                                 trControl = ctrl)
-    
-    
-    # evaluate on test set in outer loop 
-    y_prob_rf <- predict(mdl_rf_inner, newdata = X_test, type = "prob")[,2]
-    y_pred_rf <- predict(mdl_rf_inner, newdata = X_test)
-    
-    tryCatch({
-        conf_mat_rf <- confusionMatrix(y_pred_rf, y_test)
-        roc_rf <- roc(y_test, y_prob_rf)
-        AUC <- auc(roc_rf)},
-      error = function(cond){
-        message('AUC was not computed')
-        AUC = NA},
-      finally = {})
-    
-    eval_rf <- cbind(t(data.frame(conf_mat_rf$overall)), 
-                         t(data.frame(conf_mat_rf$byClass)), 
-                         data.frame(AUC))
-    
-    cv_results[[2]] <-  cv_results[[2]] %>% rbind(eval_rf)
-  }
-  
-  rownames(cv_results$enet) <- 1:outer_number
-  rownames(cv_results$rf) <- 1:outer_number
-  
-  return(cv_results)
-
-}
-
-```
-
+# Define cross validation function
 
 ```{r}
 
@@ -171,12 +53,8 @@ nested_cv_reg <- function(data, target, inner_method = 'cv', inner_number = 10,
   # cross validation strategy for inner loop
   ctrl <- trainControl(method = "cv", number = inner_number)
   
-  # parameter grid for elastic net
-  enet_grid <- expand.grid(.lambda = seq(.05, 1, length = 5),
-                      .alpha = seq(.05, 1, length = 5))
-  
   # parameter grid for random forest
-  rf_grid <- data.frame(.mtry = seq(2, (ncol(data) * 0.8), 5))
+  rf_grid <- data.frame(.mtry = seq(2, (ncol(data) * 0.8), 2))
   
   
   # create empty list for results
@@ -214,21 +92,6 @@ nested_cv_reg <- function(data, target, inner_method = 'cv', inner_number = 10,
     X_test <- testing %>% dplyr::select(-all_of(target))
     y_test <- testing[[target]]
   
-    
-    #### LASSO
-    # parameter tuning in inner loop
-    mdl_enet_inner <- caret::train(X_train, y_train, method = "glmnet",
-                                   preProcess = c("center", "scale"),
-                                   trControl = ctrl, 
-                                   tuneGrid = enet_grid)
-    
-    # evaluate on test set in outer loop 
-    y_pred_enet <- predict(mdl_enet_inner, newdata = X_test)
-    eval_enet <- defaultSummary(data.frame(obs = y_test, pred = y_pred_enet))
-    cor_acc <- cor(y_test, y_pred_enet)
-    eval_enet = eval_enet %>% as.data.frame() %>% t() %>% cbind(cor_acc)
-    cv_results[[1]] <-  cv_results[[1]] %>% rbind(eval_enet)
-    
   
     #### random forest
     # parameter tuning in inner loop
@@ -239,10 +102,25 @@ nested_cv_reg <- function(data, target, inner_method = 'cv', inner_number = 10,
                                  trControl = ctrl)
     
     # evaluate on test set in outer loop 
-    y_pred_rf <- predict(mdl_rf_inner, newdata = X_test)
+    y_pred_rf <- predict(mdl_rf_inner, newdata = X_test) %>% scale()
+    y_test <- y_test %>% scale()
+    
     eval_rf <- defaultSummary(data.frame(obs = y_test, pred = y_pred_rf))
     cor_acc <- cor(y_test, y_pred_rf)
-    eval_rf = eval_rf %>% as.data.frame() %>% t() %>% cbind(cor_acc)
+    
+    rss <- sum((y_pred_rf - y_test) ^ 2)
+    tss <- sum((y_test - mean(y_test)) ^ 2)
+    rsq <- 1 - rss/tss
+    
+    eval_rf = eval_rf %>% 
+      as.data.frame() %>% t() %>% 
+      cbind(rsq) %>% 
+      cbind(cor_acc)
+    
+    rss <- NULL
+    tss <- NULL
+    rsq <- NULL
+
     cv_results[[2]] <-  cv_results[[2]] %>% rbind(eval_rf)
     
   }
@@ -368,17 +246,16 @@ sc_feat_item_wide = sc_feat_item %>% dplyr::select(id) %>% unique()
 
 for (i in names(sc_feat_item)[3:length(sc_feat_item)-1]){
   
-  long_temp <- sc_feat_item %>% dplyr::select(id, item, all_of(i)) 
-  wide_temp <- long_temp %>% tidyr::spread(key=item, value = i) 
+  long_temp <- sc_feat_item %>% dplyr::select(id, item, all_of(i))
+  wide_temp <- long_temp %>% tidyr::spread(key=item, value = i)
   names(wide_temp) <- paste("sc",names(wide_temp), i, sep='_')
   names(wide_temp)[1] <- "id"
   sc_feat_item_wide = sc_feat_item_wide %>% inner_join(wide_temp, by="id")
 }
 
-dim(sc_feat_item_wide)
+sc_feat_item_wide <- sc_feat_item_wide[!str_detect(names(sc_feat_item_wide), 'item')]
 
 sc_feat_item_wide
-
 ```
 
 # Classificatio task - predicting inividual item solutions
@@ -398,11 +275,11 @@ sc_feat_item_clean %>% head()
 ### Correlations of item level aggregates
 ```{r}
 
-sc_feat_item_clean %>% group_by(item) %>% 
+sc_feat_item_clean %>% group_by(item) %>%
   summarize_if(is.numeric, mean)
 
-sc_feat_item_clean %>% group_by(item) %>% 
-  summarize_if(is.numeric, mean) %>% 
+sc_feat_item_clean %>% group_by(item) %>%
+  summarize_if(is.numeric, mean) %>%
   select_if(is.numeric) %>% cor() %>% round(3) %>%
   as_tibble(rownames = "variables")
 
@@ -422,116 +299,6 @@ sc_feat_item_clean %>% group_by(id) %>%
 
 ```
 
-## Predict all items in one model
-
-```{r message=FALSE}
-
-# subset data to relevant items
-sc_feat_item_all <- sc_feat_item_clean %>% 
-  filter(item %in% 6:10)%>% select(-id, -item) 
-
-# fit and evaluate models in nested cv
-cv_results_all <- nested_cv_clf(data = sc_feat_item_all, 
-                                target = 'answer',
-                                outer_method = 'monte_carlo',
-                                inner_number = 10,
-                                outer_number = 10,
-                                imb_sampling = 'smote',
-                                random_seed = 1)
-
-# check results 
-cv_results_all$enet %>% summarise_all(mean) %>% t()
-cv_results_all$rf %>% summarise_all(mean) %>% t()
-
-```
-
-
-## Predict individual items 
-```{r}
-
-sc_feat_item_sc6 <- sc_feat_item_clean %>% 
-  filter(item == 6) %>% select(-id, -item)
-
-cv_results_sc6 <- nested_cv_clf(data = sc_feat_item_sc6,
-                                target = 'answer',
-                                outer_method = 'monte_carlo',
-                                inner_number = 2, 
-                                outer_number = 2,
-                                imb_sampling = 'smote',
-                                random_seed = 1)
-
-cv_results_sc6$enet %>% summarize_all(mean) %>% t()
-cv_results_sc6$rf %>% summarize_all(mean) %>% t()
-
-```
-
-```{r}
-
-sc_feat_item_sc7 <- sc_feat_item_clean %>% 
-  filter(item == 7) %>% select(-id, -item)
-
-cv_results_sc7 <- nested_cv_clf(data = sc_feat_item_sc7,
-                                target = 'answer',
-                                outer_method = 'monte_carlo',
-                                inner_number = 2, 
-                                outer_number = 2,
-                                imb_sampling = 'smote',
-                                random_seed = 1)
-
-cv_results_sc7
-
-```
-
-```{r}
-
-sc_feat_item_sc8 <- sc_feat_item_clean %>% 
-  filter(item == 8) %>% select(-id, -item)
-
-cv_results_sc8 <- nested_cv_clf(data = sc_feat_item_sc8,
-                                target = 'answer',
-                                outer_method = 'monte_carlo',
-                                inner_number = 2, 
-                                outer_number = 2,
-                                imb_sampling = 'smote',
-                                random_seed = 1)
-
-cv_results_sc8
-
-```
-
-```{r}
-
-sc_feat_item_sc9 <- sc_feat_item_clean %>% 
-  filter(item == 9) %>% select(-id, -item)
-
-cv_results_sc9 <- nested_cv_clf(data = sc_feat_item_sc9,
-                                target = 'answer',
-                                outer_method = 'monte_carlo',
-                                inner_number = 2, 
-                                outer_number = 2,
-                                imb_sampling = 'smote',
-                                random_seed = 1)
-
-cv_results_sc9
-
-```
-
-```{r}
-
-sc_feat_item_sc10 <- sc_feat_item_clean %>% 
-  filter(item == 10) %>% select(-id, -item)
-
-cv_results_sc10 <- nested_cv_clf(data = sc_feat_item_sc10,
-                                 target = 'answer',
-                                 outer_method = 'monte_carlo',
-                                 inner_number = 5, 
-                                 outer_number = 2,
-                                 imb_sampling = 'smote',
-                                 random_seed = 1)
-
-cv_results_sc10
-
-```
 
 
 # Predict Overall Scores
@@ -570,18 +337,12 @@ sc_feat_all_pred_sc <- sc_feat_all %>%
 cv_results_sc <- nested_cv_reg(data = sc_feat_all_pred_sc, 
                                target = 'sc',
                                outer_method = 'monte_carlo',
-                               inner_number = 5, 
-                               outer_number = 10,
+                               inner_number = 10, 
+                               outer_number = 30,
+                               p_mc = 0.85,
                                random_seed = 1)
 
-cv_results_sc$enet %>% as.data.frame() %>% map_dbl(mean)
-cv_results_sc$rf %>% as.data.frame() %>% map_dbl(mean)
-
-cv_results_sc
-
-
 ```
-
 
 ## Predict MR Scores From Aggregate Process Data
 ```{r}
@@ -594,17 +355,11 @@ cv_results_mr <- nested_cv_reg(data = sc_feat_all_pred_mr,
                            target = 'mr',
                            #outer_method = 'monte_carlo',
                            inner_number = 10, 
-                           outer_number = 10,
+                           outer_number = 30,
+                           p_mc = 0.85,
                            random_seed = 1)
 
-cv_results_mr$enet %>% as.data.frame() %>% replace( is.na(.), 0) %>% map_dbl(mean)
-cv_results_mr$rf %>% as.data.frame() %>% replace( is.na(.), 0) %>% map_dbl(mean)
-
-cv_results_mr
-
-
 ```
-
 
 ## Predict PC Scores From Aggregate Process Data
 ```{r}
@@ -616,14 +371,11 @@ sc_feat_all_pred_pc <- sc_feat_all %>%
 cv_results_pc <- nested_cv_reg(data = sc_feat_all_pred_pc, 
                                target = 'pc',
                                outer_method = 'monte_carlo',
-                               inner_number = 5, 
-                               outer_number = 10,
+                               inner_number = 10, 
+                               outer_number = 30,
+                               p_mc = 0.85,
                                random_seed = 1)
 
-cv_results_pc$enet %>% as.data.frame() %>% replace( is.na(.), 0) %>% map_dbl(mean)
-cv_results_pc$rf %>% as.data.frame() %>% replace( is.na(.), 0) %>% map_dbl(mean)
-
-cv_results_pc
 ```
 
 
@@ -637,38 +389,58 @@ sc_feat_all_pred_vkmr <- sc_feat_all %>%
 cv_results_vkmr <- nested_cv_reg(data = sc_feat_all_pred_vkmr,
                                  target = 'VKMR',
                                  outer_method = 'monte_carlo',
-                                 inner_number = 5, 
-                                 outer_number = 10,
+                                 inner_number = 10, 
+                                 outer_number = 30,
+                                 p_mc = 0.85,
                                  random_seed = 1)
 
-cv_results_vkmr$enet %>% as.data.frame() %>% map_dbl(mean)
-cv_results_vkmr$rf %>% as.data.frame() %>% map_dbl(mean)
-
-cv_results_vkmr
 ```
 
 
 ## Predict SPM Scores From Aggregate Process Data
 ```{r}
 
-sc_feat_all_pred_spm <- sc_feat_all %>% 
-  dplyr::select(-c(pc, mr, sc, VKMR, xPos_range, ray_x_range)) %>% 
+sc_feat_all_pred_spm <- sc_feat_all %>%
+  dplyr::select(-c(pc, mr, sc, VKMR, xPos_range, ray_x_range)) %>%
   column_to_rownames("id")
 
-cv_results_spm <- nested_cv_reg(data = sc_feat_all_pred_spm, 
+cv_results_spm <- nested_cv_reg(data = sc_feat_all_pred_spm,
                                 target = 'SPM',
                                 outer_method = 'monte_carlo',
-                                inner_number = 5, 
-                                outer_number = 10,
+                                inner_number = 10,
+                                outer_number = 30,
+                                p_mc = 0.85,
                                 random_seed = 1)
-
-cv_results_spm$enet %>% as.data.frame() %>% replace( is.na(.), 0) %>% map_dbl(mean)
-cv_results_spm$rf %>% as.data.frame() %>% replace( is.na(.), 0) %>% map_dbl(mean)
-cv_results_spm
-
 
 ```
 
+```{r}
+
+results <- list(cv_results_sc, cv_results_pc, cv_results_mr, cv_results_vkmr, cv_results_spm)
+targets <- c('SC', 'PC', 'MR', 'VKMR', 'SPM')
+
+rf_metrics <- NULL
+
+for(i in results){
+
+  rf_mean <- i$rf %>% as.data.frame() %>% replace( is.na(.), 0) %>% map_dbl(mean)
+  names(rf_mean) <- paste0(names(rf_mean), '_mean')
+  rf_se <- i$rf %>% as.data.frame() %>% replace( is.na(.), 0) %>% map_dbl(function(x) sd(x)/sqrt(length(x)))
+  names(rf_se) <- paste0(names(rf_se), '_se')
+  
+  rf_metrics <- rf_metrics %>% rbind(c(rf_mean, rf_se))
+}
+
+rownames(rf_metrics) <-targets
+rf_metrics %>% as.data.frame %>% 
+  select(RMSE_mean, RMSE_se, MAE_mean, MAE_se, V5_mean, V5_se)
+
+
+rf_metrics %>% as.data.frame %>% 
+  select(RMSE_mean, RMSE_se, MAE_mean, MAE_se, V5_mean, V5_se) %>% 
+  xtable::xtable()
+
+```
 
 # Cluster Analysis of Solution Strategies 
 ### Identify clusters using UMAP and DBSCAN
@@ -688,40 +460,59 @@ sc_feat_umap
 dbscan_cluster = dbscan(sc_feat_umap$layout, eps=3)
 cluster <- dbscan_cluster$cluster
 
-sc_feat_all <- sc_feat_all %>% 
+sc_feat_all_clust <- sc_feat_all %>% 
   cbind(cluster)
 
-plot(sc_feat_umap$layout,col = cluster)
+plot(sc_feat_umap$layout, col = cluster, xlab = '', ylab = '')
+legend("bottom", legend=levels(as.factor(cluster)), pch=16, col=unique(cluster))
+
+
+df_plot <- cbind(sc_feat_umap$layout, cluster) %>% as.data.frame()
+names(df_plot) <- c('Dimension_1', 'Dimension_2', 'cluster')
+df_plot <- df_plot %>% mutate(cluster = as.factor(cluster))
+
+ggplot(data = df_plot, 
+       aes(x = Dimension_1, y = Dimension_2, color = cluster, size = 1.5, alpha = 0.5)) +
+  geom_point() +
+  guides(alpha = FALSE) +
+  guides(size = FALSE) +
+  theme_bw() +
+  annotate("text", x = 6, y = -7, label = "SC = 1.22", size = 5) +
+  annotate("text", x = 0, y = 4, label = "median AUC", size = 5) +
+  annotate("text", x = 7, y = 4, label = "median AUC", size = 5) +
+  annotate("text", x = -5, y = 0, label = "median AUC", size = 5) +
+  annotate("text", x = 5, y = -2, label = "median AUC", size = 5)
+  
 ```
 
 ### Test for cluster differences 
 ```{r}
 # Test for group differences between clusters (ANOVA)
-sc_feat_all %>% group_by(cluster) %>% summarize(mean(sc))
-anova_results <- aov(sc~as.factor(cluster), data = sc_feat_all)
+sc_feat_all_clust %>% group_by(cluster) %>% summarize(mean(sc))
+anova_results <- aov(sc~as.factor(cluster), data = sc_feat_all_clust)
 anova_results %>% summary()
+lm(sc~as.factor(cluster), data = sc_feat_all_clust) %>% summary()
 
-sc_feat_all %>% group_by(cluster) %>% summarize(mean(pc))
-anova_results <- aov(pc~as.factor(cluster), data = sc_feat_all)
-anova_results %>% summary()
-
-sc_feat_all %>% group_by(cluster) %>% summarize(mean(mr))
-anova_results <- aov(mr~as.factor(cluster), data = sc_feat_all)
-anova_results %>% summary()
-
-sc_feat_all %>% group_by(cluster) %>% summarize(mean(VKMR))
-anova_results <- aov(VKMR~as.factor(cluster), data = sc_feat_all)
-anova_results %>% summary()
-
-sc_feat_all %>% group_by(cluster) %>% summarize(mean(SPM))
-anova_results <- aov(SPM~as.factor(cluster), data = sc_feat_all)
-anova_results %>% summary()
 
 # Pairwise t-test
-pairwise.t.test(sc_feat_all$sc, sc_feat_all$cluster)
-pairwise.t.test(sc_feat_all$pc, sc_feat_all$cluster)
-pairwise.t.test(sc_feat_all$mr, sc_feat_all$cluster)
-pairwise.t.test(sc_feat_all$VKMR, sc_feat_all$cluster)
-pairwise.t.test(sc_feat_all$SPM, sc_feat_all$cluster)
+pairwise.t.test(sc_feat_all_clust$sc, sc_feat_all_clust$cluster, p.adjust.method ='none')
 
 ```
+
+### Explore different strategies 
+```{r}
+
+sc_feat_all_clust %>% group_by(cluster) %>% summarize(mean = mean(sc),
+                                                      sd = sd(sc), 
+                                                      se = sd(sc)/sqrt(n()))
+sc_feat_all_clust %>% filter(cluster==3) %>% map(mean) %>% unlist()
+
+```
+
+
+```{r}
+
+sc_feat_all_clust %>% filter(cluster==1) %>% map(mean) %>% unlist()
+
+```
+

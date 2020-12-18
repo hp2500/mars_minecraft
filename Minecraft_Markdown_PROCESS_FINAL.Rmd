@@ -1,0 +1,514 @@
+---
+title: "Process Data Analysis"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# MAC
+knitr::opts_knit$set(root.dir = '../Data')
+
+```
+
+
+# Import Libraries
+```{r, results = "hide", message=FALSE}
+
+library(tidyverse)
+library(dplyr)
+library(tidyr)
+library(caret)
+library(glmnet)
+library(grid)
+library(pROC)
+library(umap)
+library(dbscan)
+library(pdp)
+library(BBmisc)
+library(ggplot2)
+library(cowplot)
+
+```
+
+
+# Import Data
+```{r, results = "hide", message=FALSE}
+
+sc <- read.csv('sc.csv')
+df_all <- read.csv('df_all.csv')
+
+```
+
+# Define cross validation function
+
+```{r}
+
+nested_cv_reg <- function(data, target, inner_method = 'cv', inner_number = 10,
+                      outer_method = 'kfold', outer_number = 10,
+                      p_mc = 0.75,
+                      random_seed=NULL){
+  
+  
+  # cross validation strategy for inner loop
+  ctrl <- trainControl(method = "cv", number = inner_number)
+  
+  # parameter grid for random forest
+  rf_grid <- data.frame(.mtry = seq(2, (ncol(data) * 0.8), 2))
+  
+  
+  # create empty list for results
+  cv_results <- list('imp' = NULL, 'rf' = NULL)
+  
+  
+  # create folds for outer k-fold cv
+  set.seed(random_seed)
+  kfolds <- rep(1:outer_number, length.out = nrow(data)) %>% sample(replace = F)
+
+  # nested cross validation loop 
+  for (i in 1:outer_number){
+    
+    print(paste('Outer loop:', i))
+    
+    # set random seed 
+    set.seed(i)
+    
+    # train test split outer loop
+    if (outer_method == 'monte_carlo'){
+    in_train <- createDataPartition(y = data[[target]],
+                                  p = p_mc, list = FALSE)
+    }
+    
+    if (outer_method == 'kfold'){
+    in_train <- which(kfolds != i)
+    }
+  
+    training <- data[ c(in_train), ]
+    testing  <- data[-c(in_train), ]
+    
+    X_train <- training %>% dplyr::select(-all_of(target))
+    y_train <- training[[target]] 
+    
+    X_test <- testing %>% dplyr::select(-all_of(target))
+    y_test <- testing[[target]]
+  
+  
+    #### random forest
+    # parameter tuning in inner loop
+    mdl_rf_inner <- caret::train(X_train, y_train, data = training, method = "rf",
+                                 preProcess = c("center", "scale"),
+                                 ntrees = 1000, importance = TRUE,
+                                 tuneGrid = rf_grid,
+                                 trControl = ctrl)
+    
+    
+    # get feature importance
+    feat_imp <- caret::varImp(mdl_rf_inner, scale=F)
+    feat_imp <- feat_imp$importance %>% t()
+    cv_results[[1]] <-  cv_results[[1]] %>% rbind(feat_imp)
+
+    
+    # evaluate on test set in outer loop 
+    y_pred_rf <- predict(mdl_rf_inner, newdata = X_test) %>% scale()
+    y_test <- y_test %>% scale()
+    
+    eval_rf <- defaultSummary(data.frame(obs = y_test, pred = y_pred_rf))
+    cor_acc <- cor(y_test, y_pred_rf)
+    
+    rss <- sum((y_pred_rf - y_test) ^ 2)
+    tss <- sum((y_test - mean(y_test)) ^ 2)
+    rsq <- 1 - rss/tss
+    
+    eval_rf = eval_rf %>% 
+      as.data.frame() %>% t() %>% 
+      cbind(rsq) %>% 
+      cbind(cor_acc)
+    
+    rss <- NULL
+    tss <- NULL
+    rsq <- NULL
+
+    cv_results[[2]] <-  cv_results[[2]] %>% rbind(eval_rf)
+    
+  }
+  
+  return(cv_results)
+
+}
+
+```
+
+
+# Exctract Process Features - SC
+
+```{r}
+variables = c('id', 'item', 'time_taken', 'distance_travelled', 
+         'xPos', 'yPos', 'zPos', 'Pitch', 'Yaw', 'ray.x.', 'ray.y.', 
+         'ray.z.', 'ray.distance.', 'distance_goal', 'looking_model', 
+         'looking_goal', 'steps', 'correctBlocks', 'incorrectBlocks', 
+         'answer')
+
+features = c('time_taken', 'distance_travelled', 
+         'xPos', 'yPos', 'zPos', 'Pitch', 'Yaw', 'ray.x.', 'ray.y.', 
+         'ray.z.', 'ray.distance.', 'distance_goal', 'looking_model', 
+         'looking_goal', 'steps', 'correctBlocks', 'incorrectBlocks')
+```
+
+```{r, warning=FALSE, message=FALSE}
+sc_feat <- sc %>% 
+  dplyr::select(all_of(variables)) %>% 
+  mutate_at(features, as.character) %>% 
+  mutate_at(features, as.numeric)
+
+
+sc_feat <- sc_feat %>% 
+  filter(item != 1 & item != 2) %>%
+  dplyr::group_by(id) %>%
+  dplyr::summarize(distance_travelled = max(as.numeric(distance_travelled), na.rm = T),
+            xPos_range = diff(range(as.numeric(xPos), na.rm = T)), 
+            xPos_mean = mean(as.numeric(xPos), na.rm = T), 
+            xPos_sd = sd(as.numeric(xPos), na.rm = T), 
+            yPos_range = diff(range(as.numeric(yPos), na.rm = T)), 
+            yPos_mean = mean(as.numeric(yPos), na.rm = T), 
+            yPos_sd = sd(as.numeric(yPos), na.rm = T), 
+            zPos_range = diff(range(as.numeric(zPos), na.rm = T)),
+            zPos_mean = mean(as.numeric(zPos), na.rm = T), 
+            zPos_sd = sd(as.numeric(zPos), na.rm = T), 
+            pitch_range = diff(range(as.numeric(Pitch), na.rm = T)),
+            pitch_mean = mean(as.numeric(Pitch), na.rm = T), 
+            pitch_sd = sd(as.numeric(Pitch), na.rm = T), 
+            yaw_range = diff(range(as.numeric(Yaw), na.rm = T)),
+            yaw_mean = mean(as.numeric(Yaw), na.rm = T),
+            yaw_sd = sd(as.numeric(Yaw), na.rm = T),
+            ray_x_range = diff(range(as.numeric(ray.x.), na.rm = T)),
+            ray_x_mean = mean(as.numeric(ray.x.), na.rm = T),
+            ray_x_sd = sd(as.numeric(ray.x.), na.rm = T),
+            ray_y_range = diff(range(as.numeric(ray.y.), na.rm = T)),
+            ray_z_mean = mean(as.numeric(ray.z.), na.rm = T),
+            ray_z_sd = sd(as.numeric(ray.z.), na.rm = T),
+            ray_dist_range = diff(range(as.numeric(ray.distance.), na.rm = T)),
+            ray_dist_mean = mean(as.numeric(ray.distance.), na.rm = T), 
+            ray_dist_sd = sd(as.numeric(ray.distance.), na.rm = T), 
+            looking_model = max(as.numeric(looking_model), na.rm = T),
+            looking_goal = max(as.numeric(looking_goal), na.rm = T),
+            looking_ratio = looking_model/looking_goal) %>%
+  ungroup()
+
+dim(sc_feat)
+sc_feat
+```
+
+
+# Predict Scores
+### Merge data
+```{r}
+sc_feat_all <- sc_feat %>% inner_join(df_all, by="id") 
+sc_feat_all
+```
+
+
+### Predict SC Scores From Process Data
+```{r}
+
+sc_feat_all_pred_sc <- sc_feat_all %>% 
+  dplyr::select(-c(pc, mr, VKMR, SPM, xPos_range, ray_x_range)) %>% 
+  column_to_rownames("id")
+
+cv_results_sc <- nested_cv_reg(data = sc_feat_all_pred_sc, 
+                               target = 'sc',
+                               outer_method = 'monte_carlo',
+                               inner_number = 10, 
+                               outer_number = 30,
+                               p_mc = 0.85,
+                               random_seed = 1)
+
+```
+
+### Predict MR Scores From Process Data
+```{r}
+
+sc_feat_all_pred_mr <- sc_feat_all %>% 
+  dplyr::select(-c(pc, sc, SPM, VKMR, xPos_range, ray_x_range)) %>% 
+  column_to_rownames("id")
+
+cv_results_mr <- nested_cv_reg(data = sc_feat_all_pred_mr, 
+                           target = 'mr',
+                           #outer_method = 'monte_carlo',
+                           inner_number = 10, 
+                           outer_number = 30,
+                           p_mc = 0.85,
+                           random_seed = 1)
+
+```
+
+### Predict PC Scores From Process Data
+```{r}
+
+sc_feat_all_pred_pc <- sc_feat_all %>% 
+  dplyr::select(-c(mr, sc, SPM, VKMR, xPos_range, ray_x_range)) %>% 
+  column_to_rownames("id")
+
+cv_results_pc <- nested_cv_reg(data = sc_feat_all_pred_pc, 
+                               target = 'pc',
+                               outer_method = 'monte_carlo',
+                               inner_number = 10, 
+                               outer_number = 30,
+                               p_mc = 0.85,
+                               random_seed = 1)
+
+```
+
+
+### Predict VKMR Scores From Process Data
+```{r}
+
+sc_feat_all_pred_vkmr <- sc_feat_all %>% 
+  dplyr::select(-c(pc, mr, sc, SPM, xPos_range, ray_x_range)) %>% 
+  column_to_rownames("id")
+
+cv_results_vkmr <- nested_cv_reg(data = sc_feat_all_pred_vkmr,
+                                 target = 'VKMR',
+                                 outer_method = 'monte_carlo',
+                                 inner_number = 10, 
+                                 outer_number = 30,
+                                 p_mc = 0.85,
+                                 random_seed = 1)
+
+```
+
+
+### Predict SPM Scores From Process Data
+```{r}
+
+sc_feat_all_pred_spm <- sc_feat_all %>%
+  dplyr::select(-c(pc, mr, sc, VKMR, xPos_range, ray_x_range)) %>%
+  column_to_rownames("id")
+
+cv_results_spm <- nested_cv_reg(data = sc_feat_all_pred_spm,
+                                target = 'SPM',
+                                outer_method = 'monte_carlo',
+                                inner_number = 10,
+                                outer_number = 30,
+                                p_mc = 0.85,
+                                random_seed = 1)
+
+```
+
+
+### Aggregate results
+```{r}
+
+results <- list(cv_results_sc, cv_results_pc, cv_results_mr, cv_results_vkmr, cv_results_spm)
+targets <- c('SC', 'PC', 'MR', 'VKMR', 'SPM')
+
+rf_metrics <- NULL
+
+for(i in results){
+
+  rf_mean <- i$rf %>% as.data.frame() %>% 
+    replace( is.na(.), 0) %>% map_dbl(mean)
+  names(rf_mean) <- paste0(names(rf_mean), '_mean')
+  rf_se <- i$rf %>% as.data.frame() %>% 
+    replace( is.na(.), 0) %>% map_dbl(function(x) sd(x)/sqrt(length(x)))
+  names(rf_se) <- paste0(names(rf_se), '_se')
+  
+  rf_metrics <- rf_metrics %>% rbind(c(rf_mean, rf_se))
+}
+
+rownames(rf_metrics) <-targets
+rf_metrics %>% as.data.frame %>% 
+  select(RMSE_mean, RMSE_se, MAE_mean, MAE_se, V5_mean, V5_se)
+
+
+rf_metrics %>% as.data.frame %>% 
+  select(RMSE_mean, RMSE_se, MAE_mean, MAE_se, V5_mean, V5_se) %>% 
+  xtable::xtable()
+
+```
+
+
+# Analyze feature importances
+
+```{r}
+feat_imps_sc <- cv_results_sc$imp %>% as.data.frame() %>% map_dbl(mean)
+feat_imps_sc_sd <- cv_results_sc$imp %>% as.data.frame() %>% map_dbl(sd)
+
+feat_imps_sc <- feat_imps_sc[names(feat_imps_sc) != 'ray_y_range']
+feat_imps_sc_sd <- feat_imps_sc_sd[names(feat_imps_sc_sd) != 'ray_y_range']
+
+feat_imps_sc_sd <- feat_imps_sc_sd[order(feat_imps_sc, decreasing = T)]
+feat_imps_sc <- feat_imps_sc[order(feat_imps_sc, decreasing = T)]
+
+feat_imps_sc %>% barplot(ylim=c(-1,15), las = 2)
+```
+
+
+```{r}
+predictors <- names(sc_feat_all[2:29])
+predictors
+
+```
+
+
+```{r}
+
+sc_feat_all <- sc_feat_all %>% select(-ray_y_range)
+
+sc_feat_norm <- sc_feat_all[-1] %>% 
+  normalize(method='range',range=c(0,1)) %>% 
+  as.data.frame()
+```
+
+```{r}
+cbind(feat_imps_sc, feat_imps_sc_sd) %>% as.data.frame() %>% xtable::xtable()
+```
+
+
+```{r}
+ggplot(sc_feat_norm, aes(y = sc)) + 
+  geom_smooth(aes(x = yPos_mean, col='yPos_mean'), se=F) +
+  geom_smooth(aes(x = yPos_sd, col='yPos_sd'), se=F) +
+  geom_smooth(aes(x = distance_travelled, col='distance_travelled'), se=F) +
+  geom_smooth(aes(x = pitch_range, col='pitch_range'), se=F) +
+  geom_smooth(aes(x = ray_dist_mean, col='ray_dist_mean'), se=F) +
+  ylab('Normalized SC Scores') +
+  xlab('Normalized Feature Values') +
+  #scale_color_manual(labels = c("T999", "T888","T99", "T88", "T77"), values = c('1', '2', '3', '4', '5')) +
+  labs(color='Features') +
+  theme_bw()
+
+  
+
+```
+
+```{r}
+ggplot(sc_feat_norm, aes(y = VKMR)) + 
+  geom_smooth(aes(x = yPos_mean, col='yPos_mean'), se=F) +
+  geom_smooth(aes(x = yPos_sd, col='yPos_sd'), se=F) +
+  geom_smooth(aes(x = distance_travelled, col='distance_travelled'), se=F) +
+  geom_smooth(aes(x = pitch_range, col='pitch_range'), se=F) +
+  geom_smooth(aes(x = ray_dist_mean, col='ray_dist_mean'), se=F) +
+  ylab('Normalized SC Scores') +
+  xlab('Normalized Feature Values') +
+  #scale_color_manual(labels = c("T999", "T888","T99", "T88", "T77"), values = c('1', '2', '3', '4', '5')) +
+  labs(color='Features') +
+  theme_bw()
+
+
+```
+
+
+
+
+
+```{r}
+
+plots <- list()
+for (i in names(feat_imps_sc)){
+  gg <- ggplot(sc_feat_norm, aes_string(x = i, y = sc_feat_norm$sc)) +
+    geom_smooth() +
+  ylab('')
+  #print(gg)
+  plots[[i]] <- as_grob(gg)
+}
+
+
+grid.arrange(plots[[1]], plots[[2]],vplots[[3]], plots[[4]], plots[[5]], 
+             plots[[6]], plots[[7]], plots[[8]], plots[[9]], plots[[10]], 
+             plots[[11]], plots[[12]], plots[[13]], plots[[14]], plots[[15]],
+             plots[[16]], plots[[17]], plots[[18]], plots[[19]], plots[[20]],
+             plots[[21]], plots[[22]], plots[[23]], plots[[24]], plots[[25]], 
+             ncol=5
+             )
+```
+
+
+
+# Cluster Analysis
+### Identify clusters using UMAP and DBSCAN
+```{r}
+# select only features
+sc_feat_all_feats <- sc_feat_all %>% 
+  dplyr::select(distance_travelled:looking_ratio)
+
+# project features to umap space
+umap_config <- umap.defaults
+umap_config$random_state <- 123
+
+sc_feat_umap <- umap(sc_feat_all_feats, umap_config, verbose=T)
+sc_feat_umap
+
+# run dbscan cluster analysis
+dbscan_cluster = dbscan(sc_feat_umap$layout, eps=3)
+cluster <- dbscan_cluster$cluster
+
+sc_feat_all_clust <- sc_feat_all %>% 
+  cbind(cluster)
+
+df_plot <- data.frame(sc_feat_umap$layout, as.factor(cluster))
+names(df_plot) <- c('Dimension_1', 'Dimension_2', 'cluster')
+
+ggplot(data = df_plot, 
+       aes(x = Dimension_1, y = Dimension_2, color = cluster, size = 1.5, alpha = 0.5)) +
+  geom_point() +
+  guides(alpha = FALSE) +
+  guides(size = FALSE) +
+  theme_bw()
+  
+```
+
+### Test for cluster differences 
+```{r}
+sc_feat_all_clust %>% 
+  dplyr::group_by(cluster) %>% 
+  dplyr::summarise(mean(sc))
+```
+
+
+```{r}
+anova_results <- aov(sc~as.factor(cluster), data = sc_feat_all_clust)
+anova_results %>% summary()
+lm(sc~as.factor(cluster), data = sc_feat_all_clust) %>% summary()
+
+# Pairwise t-test
+pwtt <- pairwise.t.test(sc_feat_all_clust$sc, 
+                sc_feat_all_clust$cluster, 
+                p.adjust.method ='none')
+
+pwtt$p.value %>% xtable()
+
+```
+
+
+# Analyze cluster differences
+```{r}
+# normalize predictors
+sc_feat_all_clust[predictors] <- sc_feat_all_clust[predictors] %>% 
+  normalize(method='range',range=c(0,1))
+
+# cluster means
+cluster_means <- sc_feat_all_clust %>% 
+  group_by(cluster) %>% 
+  summarise_at(predictors, mean)
+```
+
+
+```{r}
+# compare clusters across predictors
+for (i in 1:5) {
+  cluster_means %>% t() %>% .[-1,] %>% .[,i] %>% barplot()
+}
+```
+
+
+```{r}
+# compare predictors across clusters
+for (i in predictors) {
+  x <- cluster_means %>% .[,-1] %>% .[i] %>% t() 
+  names(x) <- 1:5
+  x %>% barplot(main = i)
+}
+
+```
+
+

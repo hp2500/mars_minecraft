@@ -1,7 +1,5 @@
 ---
-title: "Minecraft"
-author: "Heinrich Peters"
-date: "11/8/2019"
+title: "Minecraft Main Script"
 output: html_notebook
 ---
 
@@ -195,7 +193,7 @@ head(sc_wide)
 ```
 
 # CREATE DATASETS
-```{r}
+```{r, message=FALSE, warning=FALSE}
 # Merge to ensure same order of subjects in all data frames
 all_wide <- join_all(list(pc_wide, mr_wide, sc_wide), by = 'id', "inner")
 all_wide <- all_wide %>% map(as.factor) %>% as.data.frame()
@@ -287,7 +285,7 @@ cbind(sc_ctt_desc$perc[,c(1,2)],
 ```
 
 # ITEM ANALYSIS PC (eRm)
-```{r}
+```{r, message=FALSE, warning=FALSE}
 #### Exclude Items ####
 # training items 
 pc_wide <- pc_wide %>% dplyr::select(-pc1, -pc2)
@@ -340,7 +338,6 @@ lrres_pc
 lrres_pc<- LRtest(res_pc, splitcr = "median")
 lrres_pc
 
-
 # Follow up wald test
 Waldtest(res_pc, splitcr = gender[,2])
 
@@ -368,7 +365,7 @@ xtable(data.frame(pc_ia_tab, row.names =NULL), type = "latex")
 ```
 
 # ITEM ANALYSIS MR (eRm)
-```{r}
+```{r, message=FALSE, warning=FALSE}
 #### Exclude items ####
 # training items
 mr_wide <- mr_wide %>% dplyr::select(-mr1, -mr2)
@@ -445,7 +442,7 @@ xtable(mr_ia_tab)
 ```
 
 # ITEM ANALYSIS SC (eRm)
-```{r}
+```{r, message=FALSE, warning=FALSE}
 #### Exclude Items ####
 # Training items first
 sc_wide <- sc_wide %>% dplyr::select(-sc1, -sc2)
@@ -498,8 +495,6 @@ lrres_sc
 lrres_sc<- LRtest(res_sc, splitcr = "median")
 lrres_sc
 
-
-
 # Wald Test
 Waldtest(res_sc, splitcr="mean")
 Waldtest(res_sc, splitcr="median")
@@ -531,8 +526,7 @@ xtable(sc_ia_tab)
 
 
 # Compare IRT and CTT scales
-```{r}
-
+```{r, message=FALSE, warning=FALSE}
 # Get IRT scores 
 pc_irt <- data.frame(pc_wide$id, coef(pres_pc))
 mr_irt <- data.frame(mr_wide$id, coef(pres_mr))
@@ -545,26 +539,28 @@ names(sc_irt) <- c("id", 'sc_irt')
 all_scores = join_all(list(pc_irt, mr_irt, sc_irt, pc_ctt, mr_ctt, sc_ctt), by='id')
 
 all_scores[-1] %>% cor() %>% xtable::xtable()
-
 ```
 
-
-
-
 # FACTOIAL VALIDITY
-```{r}
+```{r, message=FALSE, warning=FALSE}
 #### Confirmatory factor analysis ####
 all_wide_2 <- merge(merge(pc_wide, mr_wide), sc_wide)
 head(all_wide_2)
 dim(all_wide_2)
 
-# 3 factor solution oblique
-cfa_3f <- 'pc =~ pc3 + pc5 + pc6 + pc7 + pc8 + pc9 + pc10 + pc11
+# 3 factor solution oblique with higher level g 
+cfa_3f_g <- 'pc =~ pc3 + pc5 + pc6 + pc7 + pc8 + pc9 + pc10 + pc11
 mr =~ mr3 + mr4 + mr5 + mr6 + mr7 + mr8 + mr10
-sc =~ sc6 + sc7 +sc8 + sc9+ sc10 + sc12'
-fit_cfa_3f <- cfa(cfa_3f, data = all_wide_2[,-1], std.lv=T, orthogonal = F)
-summary(fit_cfa_3f, standardized = T, fit.measures = T, rsq = T)
-semPaths(fit_cfa_3f, "std",cardinal = F, edge.label.cex = 0.6, curvePivot =T, layout = "tree2", sizeMan = 3, sizeMan2 = 2, edge.color = "black", edge.label.position = 0.8)
+sc =~ sc6 + sc7 +sc8 + sc9+ sc10 + sc12
+g =~ pc + mr + sc'
+fit_cfa_3f_g <- cfa(cfa_3f_g, data = all_wide_2[,-1], std.lv=T)
+summary(fit_cfa_3f_g, standardized = T, fit.measures = T, rsq = T)
+semPaths(fit_cfa_3f_g, "std",cardinal = F, edge.label.cex = 0.6, curvePivot =T, layout = "tree2", sizeMan = 3, sizeMan2 = 2, edge.color = "black", edge.label.position = 0.8)
+
+# model with just one latent factor
+cfa.model.one <- 'score =~ pc3 + pc5 + pc6 + pc7 + pc8 + pc9 + pc10 + pc11 + mr3 + mr4 + mr5 + mr6 + mr7 + mr8 + mr10 + sc6 + sc7 +sc8 + sc9 + sc10 + sc12'
+fit_cfa.one <- cfa(cfa.model.one, data = all_wide_2[,-1])
+summary(fit_cfa.one, standardized = T, fit.measures = T, rsq = T)
 
 # 3 factor solution orthogonal
 cfa_3f <- 'pc =~ pc3 + pc5 + pc6 + pc7 + pc8 + pc9 + pc10 + pc11
@@ -572,61 +568,42 @@ mr =~ mr3 + mr4 + mr5 + mr6 + mr7 + mr8 + mr10
 sc =~ sc6 + sc7 +sc8 + sc9+ sc10 + sc12'
 fit_cfa.ort <- cfa(cfa_3f, data = all_wide_2[,-1], std.lv=T, orthogonal = T)
 summary(fit_cfa.ort, standardized = T, fit.measures = T, rsq = T)
-semPaths(fit_cfa.ort, "std",cardinal = F, edge.label.cex = 0.6, curvePivot =T, layout = "tree2", sizeMan = 3, sizeMan2 = 2, edge.color = "black", edge.label.position = 0.8)
-anova(fit_cfa_3f, fit_cfa.ort) 
+
+# compare models
+anova(fit_cfa.one, fit_cfa_3f_g)
+anova(fit_cfa.ort, fit_cfa_3f_g)
+```
+
+
+```{r, message=FALSE, warning=FALSE}
+
+# 2 factor solution with higher level g
+cfa_2f_g <- 'pc =~ pc3 + pc5 + pc6 + pc7 + pc8 + pc9 + pc10 + pc11
+sc =~ sc6 + sc7 +sc8 + sc9+ sc10 + sc12
+g =~ pc + sc'
+fit_cfa_2f_g <- cfa(cfa_2f_g, data = all_wide_2[,-1], std.lv=T, orthogonal=F)
+summary(fit_cfa_2f_g, standardized = T, fit.measures = T, rsq = T)
+semPaths(fit_cfa_2f_g, "std",cardinal = F, edge.label.cex = 0.6, curvePivot =T, layout = "tree2", sizeMan = 3, sizeMan2 = 2, edge.color = "black", edge.label.position = 0.8)
 
 # model with just one latent factor
-cfa.model.one <- 'score =~ pc3 + pc5 + pc6 + pc7 + pc8 + pc9 + pc10 + pc11 + mr3 + mr4 + mr5 + mr6 + mr7 + mr8 + mr10 + sc6 + sc7 +sc8 + sc9 + sc10 + sc12'
-fit_cfa.one <- cfa(cfa.model.one, data = all_wide_2[,-1])
-summary(fit_cfa.one, standardized = T, fit.measures = T, rsq = T)
-anova(fit_cfa_3f, fit_cfa.one)
-
-# 3 factor solution with higher level g 
-cfa_3f_g <- 'pc =~ pc3 + pc5 + pc6 + pc7 + pc8 + pc9 + pc10 + pc11
-mr =~ mr3 + mr4 + mr5 + mr6 + mr7 + mr8 + mr10
-sc =~ sc6 + sc7 +sc8 + sc9+ sc10 + sc12
-g =~ pc + mr + sc'
-fit_cfa_3f_g <- cfa(cfa_3f_g, data = all_wide_2[,-1], std.lv=T, orthogonal = F)
-summary(fit_cfa_3f_g, standardized = T, fit.measures = T, rsq = T)
-semPaths(fit_cfa_3f_g, "std",cardinal = F, edge.label.cex = 0.6, curvePivot =T, layout = "tree2", sizeMan = 3, sizeMan2 = 2, edge.color = "black", edge.label.position = 0.8)
-anova(fit_cfa_3f, fit_cfa.ort, fit_cfa.one, fit_cfa_3f_g)
-
-
-# 2 factor solution oblique MR excluded
-cfa_2f <- 'pc =~ pc3 + pc5 + pc6 + pc7 + pc8 + pc9 + pc10 + pc11
-sc =~ sc6 + sc7 +sc8 + sc9+ sc10 + sc12'
-fit_cfa_2f <- cfa(cfa_2f, data = all_wide_2[,-1], std.lv=T, orthogonal = F)
-summary(fit_cfa_2f, standardized = T, fit.measures = T, rsq = T)
-semPaths(fit_cfa_2f, "std",cardinal = F, edge.label.cex = 0.6, curvePivot =T, layout = "tree2", sizeMan = 3, sizeMan2 = 2, edge.color = "black", edge.label.position = 0.8)
+cfa_2f_one <- 'score =~ pc3 + pc5 + pc6 + pc7 + pc8 + pc9 + pc10 + pc11 + sc6 + sc7 +sc8 + sc9 + sc10 + sc12'
+fit_cfa_2f_one <- cfa(cfa_2f_one, data = all_wide_2[,-1])
+summary(fit_cfa_2f_one, standardized = T, fit.measures = T, rsq = T)
 
 # 2 factor solution orthogonal MR excluded
 cfa_2f_orth <- 'pc =~ pc3 + pc5 + pc6 + pc7 + pc8 + pc9 + pc10 + pc11
 sc =~ sc6 + sc7 +sc8 + sc9+ sc10 + sc12'
 fit_cfa_2f_orth <- cfa(cfa_2f_orth, data = all_wide_2[,-1], std.lv=T, orthogonal = T)
 summary(fit_cfa_2f_orth, standardized = T, fit.measures = T, rsq = T)
-semPaths(fit_cfa_2f_orth, "std",cardinal = F, edge.label.cex = 0.6, curvePivot =T, layout = "tree2", sizeMan = 3, sizeMan2 = 2, edge.color = "black", edge.label.position = 0.8)
-anova(fit_cfa_2f, fit_cfa_2f_orth)
-
-# compare to model with just one latent factor
-cfa_2f_one <- 'score =~ pc3 + pc5 + pc6 + pc7 + pc8 + pc9 + pc10 + pc11 + sc6 + sc7 +sc8 + sc9 + sc10 + sc12'
-fit_cfa_2f_one <- cfa(cfa_2f_one, data = all_wide_2[,-1])
-summary(fit_cfa_2f_one, standardized = T, fit.measures = T, rsq = T)
-
-# 2 factor solution with higher level g
-cfa_2f_g <- 'pc =~ pc3 + pc5 + pc6 + pc7 + pc8 + pc9 + pc10 + pc11
-sc =~ sc6 + sc7 +sc8 + sc9+ sc10 + sc12
-g =~ a*pc + a*sc'
-fit_cfa_2f_g <- cfa(cfa_2f_g, data = all_wide_2[,-1], std.lv=T, orthogonal = F)
-summary(fit_cfa_2f_g, standardized = T, fit.measures = T, rsq = T)
-semPaths(fit_cfa_2f_g, "std",cardinal = F, edge.label.cex = 0.6, curvePivot =T, layout = "tree2", sizeMan = 3, sizeMan2 = 2, edge.color = "black", edge.label.position = 0.8)
-anova(fit_cfa_2f, fit_cfa_2f_orth, fit_cfa_2f_one, fit_cfa_2f_g)
-
+#semPaths(fit_cfa_2f_orth, "std",cardinal = F, edge.label.cex = 0.6, curvePivot =T, layout = "tree2", sizeMan = 3, sizeMan2 = 2, edge.color = "black", edge.label.position = 0.8)
 
 anova(fit_cfa_2f_one, fit_cfa_2f_g)
+anova(fit_cfa_2f_orth, fit_cfa_2f_g)
+
 ```
 
 # CONVERGENT VALIDITY
-```{r, warning=FALSE}
+```{r, message=FALSE, warning=FALSE}
 #### Prepare data ####
 #Read SPM and VKMR data
 #dat_pen_paper <- read.csv("C:\\Users\\Heinrich\\Google Drive\\DATA-20180216T104535Z-001\\dat_merged")
@@ -685,8 +662,6 @@ cor.test(df_all$mr,df_all$SPM, method = "spearman", exact=F, alternative = "grea
 cor.test(df_all$sc,df_all$VKMR, method = "spearman", exact=F, alternative = "greater")
 cor.test(df_all$sc,df_all$SPM, method = "spearman", exact=F, alternative = "greater")
 
-
-
 #### Structural equation model #### 
 SEM_2f <- 'MARS =~ pc + sc
           PB =~ VKMR + SPM
@@ -694,7 +669,7 @@ SEM_2f <- 'MARS =~ pc + sc
 
 fit_SEM_2f <- sem(SEM_2f, data = df_all, std.lv=F, orthogonal = F, estimator = "MLM")  # MLM because not multivariate nomal
 summary(fit_SEM_2f, standardized = T, fit.measures = T, rsq = T)
-semPaths(fit_SEM_2f, "std",cardinal = F, edge.label.cex = 0.6, curvePivot =T, layout = "tree", sizeMan = 3, sizeMan2 = 2, edge.color = "black", edge.label.position = 0.8)
+#semPaths(fit_SEM_2f, "std",cardinal = F, edge.label.cex = 0.6, curvePivot =T, layout = "tree", sizeMan = 3, sizeMan2 = 2, edge.color = "black", edge.label.position = 0.8)
 
 
 # SEM with measurement model
@@ -708,14 +683,11 @@ SEM_MM <- 'PC =~ pc3 + pc5 + pc6 + pc7 + pc8 + pc9 + pc10 + pc11
 
 fit_SEM_MM <- sem(SEM_MM, data = df_all_wide_2, std.lv=F, orthogonal = F, estimator = "MLM")  # MLM because not multivariate nomal
 summary(fit_SEM_MM, standardized = T, fit.measures = T, rsq = T)
-semPaths(fit_SEM_MM, "std",cardinal = F, edge.label.cex = 0.6, curvePivot =T, layout = 'tree2', sizeMan = 3, sizeMan2 = 2, edge.color = "black", edge.label.position = 0.8)
-
-
-
+#semPaths(fit_SEM_MM, "std",cardinal = F, edge.label.cex = 0.6, curvePivot =T, layout = 'tree2', sizeMan = 3, sizeMan2 = 2, edge.color = "black", edge.label.position = 0.8)
 ```
 
 # Discriminant Validity
-```{r}
+```{r, message=FALSE, warning=FALSE}
 # compare criterion correlations pc
 r.jk <- cor(df_all$pc,df_all$SPM, method = "spearman")
 r.jk
@@ -745,63 +717,43 @@ cocor.dep.groups.overlap(r.jk, r.jh, r.kh, n = 120, alternative = "greater")
 ```
 
 # Demographics, experience and enjoyment
-```{r}
+```{r, message=FALSE, warning=FALSE}
 # ceate new dataset with experience and demographic variables
 teq <- aggdata_dem(pc)
-head(teq)
-summary(teq)
-dim(teq)
-
-summary(teq$age)
-sd(teq$age)
-table(teq$gender)
-table(teq$mcExperience)
-prop.table(table(teq$mcExperience))
-
-summary(teq$gamesGen)
-summary(teq$gamingSkills)
-
 df_all_teq <- merge(df_all, teq)
 head(df_all_teq)
-dim(df_all_teq)
 
 summary(df_all_teq$age)
 sd(df_all_teq$age)
 table(df_all_teq$gender)
 table(df_all_teq$mcExperience)
 prop.table(table(df_all_teq$mcExperience))
+summary(df_all_teq$gamesGen)
+summary(df_all_teq$gamingSkills)
 
 ``` 
 
 # Item analysis test enjoyment questionnaire
-```{r}
+```{r, message=FALSE, warning=FALSE}
 # shrink dataset to relevant variables
 teq_2 <- subset(teq, select = -c(age,gender, gamesGen, gamingSkills,mcExperience))
-head(teq_2)
 
 # recode negatively coded variables
 teq_2$Distracted <- 6-teq_2$Distracted
 teq_2$Boring <- 6-teq_2$Boring
-head(teq_2)
 
 teq_agg <- data.frame(teq_2$id,rowSums(teq_2[,-1]))
 names(teq_agg) <- c("id","liking")
-head(teq_agg)
-
-hist(teq_agg[,2], main = "Test Enjoyment Scale", xlab = "Scores")
 
 df_all_teq2 <- merge(df_all_teq, teq_agg) 
-head(df_all_teq2)#
 
 mean(df_all_teq2$liking)
 sd(df_all_teq2$liking)
-
-
 ```
 
 
 # Test for effects of gender
-```{r}
+```{r, message=FALSE, warning=FALSE}
 bonf = 8
 
 # pc~gender
@@ -859,11 +811,10 @@ t_sags_gender
 wilcox.test(data = df_all_teq2, gamingSkills~gender)
 cohen.d(data = df_all_teq2, gamingSkills~factor(gender))
 t_sags_gender$p.value *bonf
-
 ```
 
 # Test for effects of Minecraft experience
-```{r}
+```{r, message=FALSE, warning=FALSE}
 bonf = 8
 
 # pc~mcexp
@@ -921,13 +872,11 @@ t_sags_mcexp
 wilcox.test(data = df_all_teq2, gamingSkills~mcExperience)
 cohen.d(data = df_all_teq2, gamingSkills~factor(mcExperience))
 t_sags_mcexp$p.value*bonf
-
-# use one sided t test
 ```
 
 
 # Effects of gaming skills and positive attitudes towards games 
-```{r}
+```{r, message=FALSE, warning=FALSE}
 # Analysis of self assessed gaming skills
 cor.test(df_all_teq$pc,df_all_teq$gamingSkills, exact = F, method = "spearman")
 cor.test(df_all_teq$mr,df_all_teq$gamingSkills, exact = F, method = "spearman")
@@ -941,15 +890,11 @@ cor.test(df_all_teq$mr,df_all_teq$gamesGen, exact = F, method = "spearman")
 cor.test(df_all_teq$sc,df_all_teq$gamesGen, exact = F, method = "spearman")
 cor.test(df_all_teq$SPM,df_all_teq$gamesGen, exact = F, method = "spearman")
 cor.test(df_all_teq$VKMR,df_all_teq$gamesGen, exact = F, method = "spearman")
-
 ```
 
 # Group differences after correcting for self assessed gaming skills
-```{r}
+```{r, message=FALSE, warning=FALSE}
 lm1 <- lm(data = df_all_teq2, sc ~ gamingSkills)
-
-
-summary(lm1)
 
 t.test(lm1$residuals~ df_all_teq2$gender)
 wilcox.test(lm1$residuals~ df_all_teq2$gender)
@@ -960,7 +905,7 @@ cohen.d(lm1$residuals~ factor(df_all_teq2$mcExperience))
 ```
 
 # Group differences after correcting for actual minecraft skills
-```{r}
+```{r, message=FALSE, warning=FALSE}
 
 # Get times spent on tutorial test item 
 files_test = list.files(pattern="*Test")
@@ -968,11 +913,9 @@ test = do.call(rbind, lapply(files_test, function(x) read.csv(x, sep=",", string
 # write_csv(test, 'test.csv')
 test_agg <- aggdata(test)
 
-
 df_all_teq_3 = merge(test_agg, df_all_teq2)
 
 lm2 <- lm(data = df_all_teq_3, sc ~ time)
-summary(lm2)
 
 cor.test(df_all_teq_3$sc,df_all_teq_3$time)
 
@@ -985,7 +928,7 @@ cohen.d(lm2$residuals~ factor(df_all_teq_3$mcExperience))
 ```
 
 # Corrected reliabilities 
-```{r}
+```{r, message=FALSE, warning=FALSE}
 pc_length = 8
 mr_length = 7
 sc_length = 6
@@ -1009,7 +952,7 @@ as.numeric(spearman.brown(0.76, 41/sc_length, "n"))
 ```
 
 ## Check for sequence effects 
-```{r}
+```{r, message=FALSE, warning=FALSE}
 
 # reformat time stamps
 test_time <- test %>% 
@@ -1055,14 +998,32 @@ t_results <- list(t_pc, t_mr, t_sc, t_SPM, t_VKMR) %>%
 t_results = c('PC', "MR", "SC", 'RSPM', "VKMR") %>% cbind(t_results)
 
 t_results %>% xtable::xtable()
+```
+## Correlations for different test sequences
+```{r}
+cor_fist <- test_time_all %>% 
+  as.data.frame() %>% 
+  filter(first_sess==1) %>% 
+  select(pc, mr, sc, VKMR, SPM) %>% 
+  cor(method = "spearman")
 
-  
+
+cor_second <- test_time_all %>% as.data.frame() %>% 
+  filter(first_sess==0) %>% 
+  select(pc, mr, sc, VKMR, SPM) %>% 
+  cor(method = "spearman")
+
+cor_average <- cor_fist * 57/110 + cor_second * 53/110
+
+cor_fist%>% xtable::xtable()
+cor_second %>% xtable::xtable()
+cor_average  %>% xtable::xtable()
 
 ```
 
 
 ## Analyze completion times 
-```{r}
+```{r, message=FALSE, warning=FALSE}
 pc_times <- pc %>% mutate(time_taken = as.numeric(as.character(time_taken))) %>% 
   group_by(id, item) %>% 
   slice(n()) %>% 

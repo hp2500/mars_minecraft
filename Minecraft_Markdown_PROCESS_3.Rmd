@@ -679,6 +679,7 @@ sc_feat_all_feats <- sc_feat_all %>%
 
 # project features to umap space
 umap_config <- umap.defaults
+umap_config
 umap_config$random_state <- 123
 
 sc_feat_umap <- umap(sc_feat_all_feats, umap_config, verbose=T)
@@ -688,40 +689,40 @@ sc_feat_umap
 dbscan_cluster = dbscan(sc_feat_umap$layout, eps=3)
 cluster <- dbscan_cluster$cluster
 
-sc_feat_all <- sc_feat_all %>% 
+sc_feat_all_clust <- sc_feat_all %>% 
   cbind(cluster)
 
-plot(sc_feat_umap$layout,col = cluster)
+plot(sc_feat_umap$layout, col = cluster, xlab = '', ylab = '')
 ```
 
 ### Test for cluster differences 
 ```{r}
 # Test for group differences between clusters (ANOVA)
-sc_feat_all %>% group_by(cluster) %>% summarize(mean(sc))
-anova_results <- aov(sc~as.factor(cluster), data = sc_feat_all)
+sc_feat_all_clust %>% group_by(cluster) %>% summarize(mean(sc))
+anova_results <- aov(sc~as.factor(cluster), data = sc_feat_all_clust)
 anova_results %>% summary()
 
-sc_feat_all %>% group_by(cluster) %>% summarize(mean(pc))
-anova_results <- aov(pc~as.factor(cluster), data = sc_feat_all)
+sc_feat_all_clust %>% group_by(cluster) %>% summarize(mean(pc))
+anova_results <- aov(pc~as.factor(cluster), data = sc_feat_all_clust)
 anova_results %>% summary()
 
-sc_feat_all %>% group_by(cluster) %>% summarize(mean(mr))
-anova_results <- aov(mr~as.factor(cluster), data = sc_feat_all)
+sc_feat_all_clust %>% group_by(cluster) %>% summarize(mean(mr))
+anova_results <- aov(mr~as.factor(cluster), data = sc_feat_all_clust)
 anova_results %>% summary()
 
-sc_feat_all %>% group_by(cluster) %>% summarize(mean(VKMR))
-anova_results <- aov(VKMR~as.factor(cluster), data = sc_feat_all)
+sc_feat_all_clust %>% group_by(cluster) %>% summarize(mean(VKMR))
+anova_results <- aov(VKMR~as.factor(cluster), data = sc_feat_all_clust)
 anova_results %>% summary()
 
-sc_feat_all %>% group_by(cluster) %>% summarize(mean(SPM))
-anova_results <- aov(SPM~as.factor(cluster), data = sc_feat_all)
+sc_feat_all_clust %>% group_by(cluster) %>% summarize(mean(SPM))
+anova_results <- aov(SPM~as.factor(cluster), data = sc_feat_all_clust)
 anova_results %>% summary()
 
 # Pairwise t-test
-pairwise.t.test(sc_feat_all$sc, sc_feat_all$cluster)
-pairwise.t.test(sc_feat_all$pc, sc_feat_all$cluster)
-pairwise.t.test(sc_feat_all$mr, sc_feat_all$cluster)
-pairwise.t.test(sc_feat_all$VKMR, sc_feat_all$cluster)
-pairwise.t.test(sc_feat_all$SPM, sc_feat_all$cluster)
+pairwise.t.test(sc_feat_all_clust$sc, sc_feat_all_clust$cluster)
+pairwise.t.test(sc_feat_all_clust$pc, sc_feat_all_clust$cluster)
+pairwise.t.test(sc_feat_all_clust$mr, sc_feat_all_clust$cluster)
+pairwise.t.test(sc_feat_all_clust$VKMR, sc_feat_all_clust$cluster)
+pairwise.t.test(sc_feat_all_clust$SPM, sc_feat_all_clust$cluster)
 
 ```
